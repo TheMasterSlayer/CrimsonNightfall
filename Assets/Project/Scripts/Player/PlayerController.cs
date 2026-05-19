@@ -157,4 +157,7 @@ public class PlayerController : MonoBehaviour
 
     public bool IsCrouching  => _isCrouching;
     public bool IsSprinting  => _isSprinting;
+
+    // Set to true by ClosetHide.cs when the player is inside a closet
+    public bool IsHiding { get; set; } = false;
 }
