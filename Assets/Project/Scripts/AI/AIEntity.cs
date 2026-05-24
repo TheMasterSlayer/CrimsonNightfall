@@ -37,11 +37,16 @@ public class AIEntity : MonoBehaviour
     [Header("Chase")]
     [SerializeField] private float losePlayerDelay = 3f; // seconds before giving up chase
 
+    [Header("Flashlight Detection")]
+    [SerializeField] private float flashlightDetectionRange = 25f; // longer than normal sight
+    [SerializeField] private float flashlightDetectionAngle = 45f; // degrees within beam
+
     // ── Private State ──────────────────────────────────────────────────────
 
-    private NavMeshAgent     _agent;
-    private Transform        _player;
-    private PlayerController _playerController;
+    private NavMeshAgent        _agent;
+    private Transform           _player;
+    private PlayerController    _playerController;
+    private FlashlightController _flashlight;
 
     private State   _state              = State.Patrolling;
     private int     _waypointIndex      = 0;
@@ -63,6 +68,7 @@ public class AIEntity : MonoBehaviour
         {
             _player           = playerObj.transform;
             _playerController = playerObj.GetComponent<PlayerController>();
+            _flashlight       = playerObj.GetComponentInChildren<FlashlightController>();
         }
     }
 
@@ -75,7 +81,7 @@ public class AIEntity : MonoBehaviour
     {
         if (GameManager.Instance == null || GameManager.Instance.IsGameOver) return;
 
-        _canSeePlayer = CheckLineOfSight();
+        _canSeePlayer = CheckLineOfSight() || CheckFlashlightDetection();
 
         switch (_state)
         {
@@ -181,6 +187,29 @@ public class AIEntity : MonoBehaviour
         if (Physics.Linecast(eyePos, playerChest, out hit))
             return hit.transform.CompareTag("Player");
 
+        return true;
+    }
+
+    // ── Flashlight Detection ───────────────────────────────────────────────
+
+    private bool CheckFlashlightDetection()
+    {
+        if (_flashlight == null || !_flashlight.IsFlashlightOn) return false;
+        if (_playerController != null && _playerController.IsHiding)  return false;
+
+        // Direction and distance from player to AI
+        Vector3 toAI     = transform.position - _player.position;
+        float   distance = toAI.magnitude;
+
+        if (distance > flashlightDetectionRange) return false;
+
+        // Use the flashlight's forward direction — it sits on the camera
+        // so it already accounts for where the player is looking vertically
+        float angle = Vector3.Angle(_flashlight.transform.forward, toAI);
+
+        if (angle > flashlightDetectionAngle) return false;
+
+        Debug.Log("[AI] Flashlight spotted — chasing!");
         return true;
     }
 

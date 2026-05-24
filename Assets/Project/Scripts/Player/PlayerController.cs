@@ -18,9 +18,11 @@ public class PlayerController : MonoBehaviour
     [SerializeField] private float gravity      = -15f;
 
     [Header("Crouch")]
-    [SerializeField] private float standHeight  = 1.8f;
-    [SerializeField] private float crouchHeight = 0.9f;
+    [SerializeField] private float standHeight       = 1.8f;
+    [SerializeField] private float crouchHeight      = 0.9f;
     [SerializeField] private float crouchTransitionSpeed = 8f;
+    [SerializeField] private float standCameraHeight  = 1.6f;
+    [SerializeField] private float crouchCameraHeight = 0.6f;
 
     [Header("Mouse Look")]
     [SerializeField] private float mouseSensitivity = 2f;
@@ -32,9 +34,10 @@ public class PlayerController : MonoBehaviour
     // ── Private State ──────────────────────────────────────────────────────
 
     private CharacterController _controller;
-    private Vector3             _velocity;          // tracks vertical (gravity) velocity
-    private float               _verticalRotation;  // camera pitch accumulator
-    private float               _targetHeight;      // height we're lerping toward
+    private Vector3             _velocity;           // tracks vertical (gravity) velocity
+    private float               _verticalRotation;   // camera pitch accumulator
+    private float               _targetHeight;       // capsule height we're lerping toward
+    private float               _targetCameraY;      // camera local Y we're lerping toward
     private bool                _isCrouching;
     private bool                _isSprinting;
 
@@ -42,8 +45,9 @@ public class PlayerController : MonoBehaviour
 
     private void Awake()
     {
-        _controller   = GetComponent<CharacterController>();
-        _targetHeight = standHeight;
+        _controller    = GetComponent<CharacterController>();
+        _targetHeight  = standHeight;
+        _targetCameraY = standCameraHeight;
 
         // Lock and hide the cursor for first-person look
         Cursor.lockState = CursorLockMode.Locked;
@@ -93,15 +97,17 @@ public class PlayerController : MonoBehaviour
 
         if (wantCrouch)
         {
-            _isCrouching  = true;
-            _isSprinting  = false;   // can't sprint while crouched
-            _targetHeight = crouchHeight;
+            _isCrouching   = true;
+            _isSprinting   = false;
+            _targetHeight  = crouchHeight;
+            _targetCameraY = crouchCameraHeight;
         }
         else if (!IsObstructedAbove())
         {
-            _isCrouching  = false;
-            _isSprinting  = Input.GetKey(KeyCode.LeftShift);
-            _targetHeight = standHeight;
+            _isCrouching   = false;
+            _isSprinting   = Input.GetKey(KeyCode.LeftShift);
+            _targetHeight  = standHeight;
+            _targetCameraY = standCameraHeight;
         }
 
         // Smoothly resize the CharacterController
@@ -113,6 +119,11 @@ public class PlayerController : MonoBehaviour
 
         // Keep the controller centred vertically
         _controller.center = new Vector3(0f, _controller.height / 2f, 0f);
+
+        // Smoothly move the camera up or down to match crouch state
+        Vector3 camPos = playerCamera.transform.localPosition;
+        camPos.y = Mathf.Lerp(camPos.y, _targetCameraY, crouchTransitionSpeed * Time.deltaTime);
+        playerCamera.transform.localPosition = camPos;
     }
 
     /// <summary>Returns true when a ceiling would block standing back up.</summary>
