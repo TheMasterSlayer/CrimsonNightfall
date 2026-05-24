@@ -220,7 +220,11 @@ public class AIEntity : MonoBehaviour
 
     private void AdvanceWaypoint()
     {
-        _waypointIndex = (_waypointIndex + 1) % waypoints.Length;
+        int next = _waypointIndex;
+        while (next == _waypointIndex && waypoints.Length > 1)
+            next = Random.Range(0, waypoints.Length);
+
+        _waypointIndex = next;
         _agent.SetDestination(waypoints[_waypointIndex].position);
     }
 
