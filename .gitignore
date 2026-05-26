@@ -38,4 +38,11 @@ Thumbs.db
 sysinfo.txt
 crashlytics-build.properties
 
+# Third-party Asset Store imports — too large for git, re-downloadable from Asset Store
+Assets/ThirdParty/
+
+# Asset pack demo scenes that imported outside ThirdParty
+Assets/Scenes/ZNS3D/
+Assets/Scenes/ZNS3D.meta
+
 # Asset meta files are required - do NOT ignore *.meta
