@@ -40,6 +40,12 @@ crashlytics-build.properties
 
 # Third-party Asset Store imports — too large for git, re-downloadable from Asset Store
 Assets/ThirdParty/
+Assets/3Dfrk/
+Assets/3Dfrk.meta
+Assets/Furniture/
+Assets/Furniture.meta
+Assets/Multistory Dungeons 2/
+Assets/Multistory Dungeons 2.meta
 
 # Asset pack demo scenes that imported outside ThirdParty
 Assets/Scenes/ZNS3D/
