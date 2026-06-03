@@ -38,15 +38,22 @@ public class AIEntity : MonoBehaviour
     [SerializeField] private float losePlayerDelay = 3f; // seconds before giving up chase
 
     [Header("Flashlight Detection")]
-    [SerializeField] private float flashlightDetectionRange = 25f; // longer than normal sight
-    [SerializeField] private float flashlightDetectionAngle = 45f; // degrees within beam
+    [SerializeField] private float flashlightDetectionRange = 25f;
+    [SerializeField] private float flashlightDetectionAngle = 45f;
+
+    [Header("Animation")]
+    [SerializeField] private Animator _animator;
+
+    [Header("Jumpscare")]
+    [SerializeField] private JumpscareController _jumpscareController;
 
     // ── Private State ──────────────────────────────────────────────────────
 
-    private NavMeshAgent        _agent;
-    private Transform           _player;
-    private PlayerController    _playerController;
+    private NavMeshAgent         _agent;
+    private Transform            _player;
+    private PlayerController     _playerController;
     private FlashlightController _flashlight;
+    private bool                 _isCatching = false;
 
     private State   _state              = State.Patrolling;
     private int     _waypointIndex      = 0;
@@ -80,8 +87,13 @@ public class AIEntity : MonoBehaviour
     private void Update()
     {
         if (GameManager.Instance == null || GameManager.Instance.IsGameOver) return;
+        if (_isCatching) return;
 
         _canSeePlayer = CheckLineOfSight() || CheckFlashlightDetection();
+
+        // Drive animation speed from actual agent velocity
+        if (_animator != null)
+            _animator.SetFloat("Speed", _agent.velocity.magnitude / chaseSpeed);
 
         switch (_state)
         {
@@ -130,7 +142,7 @@ public class AIEntity : MonoBehaviour
             _agent.SetDestination(_player.position);
 
             if (Vector3.Distance(transform.position, _player.position) <= catchDistance)
-                GameManager.Instance.OnPlayerCaught();
+                TriggerCatch();
         }
         else
         {
@@ -223,6 +235,7 @@ public class AIEntity : MonoBehaviour
         {
             case State.Patrolling:
                 _agent.speed = patrolSpeed;
+                if (_animator != null) _animator.SetBool("IsChasing", false);
                 if (waypoints.Length > 0)
                     _agent.SetDestination(waypoints[_waypointIndex].position);
                 Debug.Log("[AI] Resuming patrol.");
@@ -232,12 +245,14 @@ public class AIEntity : MonoBehaviour
                 _agent.speed        = chaseSpeed;
                 _lastKnownPlayerPos = _player.position;
                 _losePlayerTimer    = losePlayerDelay;
+                if (_animator != null) _animator.SetBool("IsChasing", true);
                 Debug.Log("[AI] Player spotted — chasing!");
                 break;
 
             case State.Returning:
                 _agent.speed    = patrolSpeed;
                 _waypointIndex  = FindNearestWaypointIndex();
+                if (_animator != null) _animator.SetBool("IsChasing", false);
                 if (waypoints.Length > 0)
                     _agent.SetDestination(waypoints[_waypointIndex].position);
                 Debug.Log("[AI] Lost the player. Returning to patrol route.");
@@ -245,7 +260,37 @@ public class AIEntity : MonoBehaviour
         }
     }
 
+    // ── Catch & Jumpscare ──────────────────────────────────────────────────
+
+    private void TriggerCatch()
+    {
+        _isCatching = true;
+
+        // Stop the AI moving
+        _agent.isStopped = true;
+
+        // Face the player
+        Vector3 dir = (_player.position - transform.position);
+        dir.y = 0f;
+        if (dir != Vector3.zero)
+            transform.rotation = Quaternion.LookRotation(dir);
+
+        // Play jumpscare animation
+        if (_animator != null)
+            _animator.SetTrigger("Jumpscare");
+
+        // Hand off to the jumpscare camera sequence
+        if (_jumpscareController != null)
+            _jumpscareController.TriggerJumpscare();
+        else
+            GameManager.Instance.OnPlayerCaught();
+    }
+
     // ── Patrol Helpers ─────────────────────────────────────────────────────
+
+    // ── Public API ─────────────────────────────────────────────────────────
+
+    public bool IsChasing => _state == State.Chasing;
 
     private void AdvanceWaypoint()
     {
