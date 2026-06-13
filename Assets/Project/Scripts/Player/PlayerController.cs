@@ -40,6 +40,8 @@ public class PlayerController : MonoBehaviour
     private float               _targetCameraY;      // camera local Y we're lerping toward
     private bool                _isCrouching;
     private bool                _isSprinting;
+    private bool                _sprintToggled;
+    private bool                _crouchToggled;
 
     // ── Unity Lifecycle ────────────────────────────────────────────────────
 
@@ -49,9 +51,40 @@ public class PlayerController : MonoBehaviour
         _targetHeight  = standHeight;
         _targetCameraY = standCameraHeight;
 
+        ActivatePlayerCamera();
+
         // Lock and hide the cursor for first-person look
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible   = false;
+    }
+
+    private void ActivatePlayerCamera()
+    {
+        if (playerCamera == null)
+            playerCamera = GetComponentInChildren<Camera>(true);
+
+        if (playerCamera == null)
+        {
+            Debug.LogError("[PlayerController] No player camera is assigned.");
+            return;
+        }
+
+        foreach (Camera sceneCamera in FindObjectsByType<Camera>(
+                     FindObjectsInactive.Include, FindObjectsSortMode.None))
+        {
+            sceneCamera.enabled = sceneCamera == playerCamera;
+
+            if (sceneCamera != playerCamera && sceneCamera.CompareTag("MainCamera"))
+                sceneCamera.gameObject.tag = "Untagged";
+        }
+
+        foreach (AudioListener listener in FindObjectsByType<AudioListener>(
+                     FindObjectsInactive.Include, FindObjectsSortMode.None))
+        {
+            listener.enabled = listener.gameObject == playerCamera.gameObject;
+        }
+
+        playerCamera.gameObject.tag = "MainCamera";
     }
 
     private void Update()
@@ -92,8 +125,19 @@ public class PlayerController : MonoBehaviour
 
     private void HandleCrouch()
     {
-        // Hold Ctrl to crouch; can't stand up if something is above you
-        bool wantCrouch = Input.GetKey(KeyCode.LeftControl);
+        if (GameSettings.CrouchToggle && Input.GetKeyDown(KeyCode.LeftControl))
+            _crouchToggled = !_crouchToggled;
+
+        if (GameSettings.SprintToggle && Input.GetKeyDown(KeyCode.LeftShift))
+            _sprintToggled = !_sprintToggled;
+
+        bool wantCrouch = GameSettings.CrouchToggle
+            ? _crouchToggled
+            : Input.GetKey(KeyCode.LeftControl);
+
+        bool wantSprint = GameSettings.SprintToggle
+            ? _sprintToggled
+            : Input.GetKey(KeyCode.LeftShift);
 
         if (wantCrouch)
         {
@@ -105,7 +149,7 @@ public class PlayerController : MonoBehaviour
         else if (!IsObstructedAbove())
         {
             _isCrouching   = false;
-            _isSprinting   = Input.GetKey(KeyCode.LeftShift);
+            _isSprinting   = wantSprint;
             _targetHeight  = standHeight;
             _targetCameraY = standCameraHeight;
         }
@@ -139,8 +183,12 @@ public class PlayerController : MonoBehaviour
 
     private void HandleMouseLook()
     {
-        float mouseX = Input.GetAxis("Mouse X") * mouseSensitivity;
-        float mouseY = Input.GetAxis("Mouse Y") * mouseSensitivity;
+        float sensitivity = mouseSensitivity * GameSettings.MouseSensitivity;
+        float mouseX = Input.GetAxis("Mouse X") * sensitivity;
+        float mouseY = Input.GetAxis("Mouse Y") * sensitivity;
+
+        if (GameSettings.InvertY)
+            mouseY = -mouseY;
 
         // Rotate the whole player body left/right (yaw)
         transform.Rotate(Vector3.up * mouseX);
