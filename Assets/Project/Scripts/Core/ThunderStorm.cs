@@ -21,13 +21,39 @@ public class ThunderStorm : MonoBehaviour
     [SerializeField] private AudioClip[] thunderClips; // assign 2-3 different thunder sounds
     [SerializeField] [Range(0f, 1f)] private float thunderVolume = 0.8f;
 
+    [Header("Rain Ambience")]
+    [SerializeField] private AudioClip rainClip;
+    [SerializeField] [Range(0f, 1f)] private float rainRoomVolume = 0.07f;
+    [SerializeField] [Range(0f, 1f)] private float rainWindowVolume = 0.32f;
+    [SerializeField] [Min(0f)] private float rainNearDistance = 2.5f;
+    [SerializeField] [Min(0f)] private float rainFarDistance = 10f;
+    [SerializeField] [Min(0.01f)] private float rainVolumeSmoothTime = 0.5f;
+
+    private static readonly string[] RainWindowNamePrefixes =
+    {
+        "BoxSashWindow",
+        "StableDoor",
+        "RoundWindowWood"
+    };
+
     private AudioSource _audioSource;
+    private AudioSource _rainSource;
+    private Transform _rainListener;
+    private Transform[] _rainWindows;
+    private float _rainVolumeVelocity;
 
     private void Awake()
     {
         _audioSource = gameObject.AddComponent<AudioSource>();
         _audioSource.spatialBlend = 0f; // 2D — thunder fills the whole room
         _audioSource.volume       = thunderVolume;
+
+        _rainSource = gameObject.AddComponent<AudioSource>();
+        _rainSource.clip = rainClip;
+        _rainSource.loop = true;
+        _rainSource.playOnAwake = false;
+        _rainSource.spatialBlend = 0f;
+        _rainSource.volume = rainRoomVolume;
     }
 
     private void Start()
@@ -35,7 +61,73 @@ public class ThunderStorm : MonoBehaviour
         if (lightningLight != null)
             lightningLight.intensity = 0f;
 
+        CacheRainWindows();
+
+        if (rainClip != null)
+            _rainSource.Play();
+
         StartCoroutine(ThunderLoop());
+    }
+
+    private void Update()
+    {
+        UpdateRainVolume();
+    }
+
+    private void CacheRainWindows()
+    {
+        PlayerController player = FindFirstObjectByType<PlayerController>();
+        _rainListener = player != null ? player.transform : null;
+
+        Transform[] sceneTransforms = FindObjectsByType<Transform>(
+            FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+
+        System.Collections.Generic.List<Transform> windows = new();
+
+        foreach (Transform sceneTransform in sceneTransforms)
+        {
+            foreach (string prefix in RainWindowNamePrefixes)
+            {
+                if (sceneTransform.name.StartsWith(prefix, System.StringComparison.OrdinalIgnoreCase))
+                {
+                    windows.Add(sceneTransform);
+                    break;
+                }
+            }
+        }
+
+        _rainWindows = windows.ToArray();
+    }
+
+    private void UpdateRainVolume()
+    {
+        if (_rainSource == null || !_rainSource.isPlaying)
+            return;
+
+        float targetVolume = rainRoomVolume;
+
+        if (_rainListener != null && _rainWindows != null && _rainWindows.Length > 0)
+        {
+            float nearestSqrDistance = float.PositiveInfinity;
+
+            foreach (Transform window in _rainWindows)
+            {
+                if (window == null)
+                    continue;
+
+                float sqrDistance = (_rainListener.position - window.position).sqrMagnitude;
+                nearestSqrDistance = Mathf.Min(nearestSqrDistance, sqrDistance);
+            }
+
+            float nearestDistance = Mathf.Sqrt(nearestSqrDistance);
+            float farDistance = Mathf.Max(rainNearDistance + 0.01f, rainFarDistance);
+            float proximity = 1f - Mathf.InverseLerp(
+                rainNearDistance, farDistance, nearestDistance);
+            targetVolume = Mathf.Lerp(rainRoomVolume, rainWindowVolume, proximity);
+        }
+
+        _rainSource.volume = Mathf.SmoothDamp(
+            _rainSource.volume, targetVolume, ref _rainVolumeVelocity, rainVolumeSmoothTime);
     }
 
     // ── Thunder Loop ───────────────────────────────────────────────────────

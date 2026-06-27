@@ -1,90 +1,267 @@
 using UnityEngine;
 
-/// <summary>
-/// Attach to any collectible item GameObject in the scene.
-/// The player walks into the trigger zone and presses E to collect it.
-///
-/// Setup required on the item GameObject:
-///   - A Collider component with "Is Trigger" checked (e.g. Sphere Collider)
-///   - This script
-/// Optional:
-///   - A child mesh/sprite for the visual
-///   - An AudioClip for the pickup sound
-/// </summary>
 public class ItemPickup : MonoBehaviour
 {
-    // ── Inspector Settings ─────────────────────────────────────────────────
+    public static bool IsAnyItemInspecting { get; private set; }
 
     [Header("Item")]
     [SerializeField] private string itemName = "Key";
+    [SerializeField] private bool grantsKey;
+    [SerializeField] private string keyId = "RoomKey";
+    [SerializeField] private Sprite inventoryIcon;
+    [SerializeField] private bool addToInventory = true;
+    [SerializeField] private string collectionMessage;
+    [SerializeField] private bool collectionMessageRequiresEsc;
+    [SerializeField] private bool showCollectionMessageAtBottom;
 
     [Header("Audio")]
     [SerializeField] private AudioClip pickupSound;
     [SerializeField] [Range(0f, 1f)] private float pickupVolume = 1f;
 
-    [Header("Prompt UI (wire up later)")]
-    [SerializeField] private GameObject promptObject; // optional — leave empty for now
+    [Header("Prompt UI")]
+    [SerializeField] private GameObject promptObject;
 
-    // ── Private State ──────────────────────────────────────────────────────
+    [Header("Interaction")]
+    [SerializeField] private bool allowLookInteraction = true;
+    [SerializeField] private float interactDistance = 3f;
 
-    private bool _playerInRange = false;
-    private bool _collected     = false;
+    [Header("Inspect Before Collect")]
+    [SerializeField] private bool inspectBeforeCollect = true;
+    [SerializeField] private float inspectDistance = 0.8f;
+    [SerializeField] private float inspectMoveSpeed = 10f;
+    [SerializeField] private float inspectRotationSpeed = 120f;
+    [SerializeField] private string inspectHint = "Move mouse to inspect. Press E to collect. Press ESC to put back.";
 
-    // ── Unity Lifecycle ────────────────────────────────────────────────────
+    private bool _playerInRange;
+    private bool _collected;
+    private bool _isInspecting;
+
+    private Transform _originalParent;
+    private Vector3 _originalPosition;
+    private Quaternion _originalRotation;
+    private Collider[] _colliders;
+    private PlayerController _playerController;
+
+    private void Awake()
+    {
+        CollectionInventory.EnsureExists();
+        _colliders = GetComponentsInChildren<Collider>();
+    }
+
+    private void OnDisable()
+    {
+        if (_isInspecting)
+            IsAnyItemInspecting = false;
+    }
 
     private void Update()
     {
-        // Only check for input when the player is standing in the trigger zone
-        if (_playerInRange && !_collected && Input.GetKeyDown(KeyCode.E))
-            Collect();
+        if (_collected)
+            return;
+
+        if (_isInspecting)
+        {
+            UpdateInspection();
+            return;
+        }
+
+        if (ClosetHide.IsPlayerInAnyEntryZone)
+            return;
+
+        if (Input.GetKeyDown(KeyCode.E) && (_playerInRange || IsLookedAt()))
+        {
+            if (inspectBeforeCollect)
+                StartInspection();
+            else
+                Collect();
+        }
     }
 
     private void OnTriggerEnter(Collider other)
     {
-        if (!other.CompareTag("Player")) return;
+        if (!IsPlayerCollider(other))
+            return;
 
         _playerInRange = true;
         ShowPrompt(true);
-        Debug.Log($"[ItemPickup] Press E to pick up: {itemName}");
     }
 
     private void OnTriggerExit(Collider other)
     {
-        if (!other.CompareTag("Player")) return;
+        if (!IsPlayerCollider(other) || _isInspecting)
+            return;
 
         _playerInRange = false;
         ShowPrompt(false);
     }
 
-    // ── Collection Logic ───────────────────────────────────────────────────
+    private void StartInspection()
+    {
+        Camera camera = Camera.main;
+        if (camera == null)
+        {
+            Collect();
+            return;
+        }
+
+        _isInspecting = true;
+        IsAnyItemInspecting = true;
+        _originalParent = transform.parent;
+        _originalPosition = transform.position;
+        _originalRotation = transform.rotation;
+
+        _playerController = FindFirstObjectByType<PlayerController>();
+        if (_playerController != null)
+            _playerController.SetInputEnabled(false);
+
+        SetCollidersEnabled(false);
+        ShowPrompt(false);
+        CollectionInventory.ShowMessage(inspectHint, 2f);
+    }
+
+    private void UpdateInspection()
+    {
+        Camera camera = Camera.main;
+        if (camera == null)
+        {
+            StopInspection();
+            return;
+        }
+
+        Vector3 targetPosition = camera.transform.position + camera.transform.forward * inspectDistance;
+        transform.position = Vector3.Lerp(transform.position, targetPosition, inspectMoveSpeed * Time.deltaTime);
+
+        float rotateX = Input.GetAxis("Mouse X") * inspectRotationSpeed * Time.deltaTime;
+        float rotateY = Input.GetAxis("Mouse Y") * inspectRotationSpeed * Time.deltaTime;
+        transform.Rotate(camera.transform.up, -rotateX, Space.World);
+        transform.Rotate(camera.transform.right, rotateY, Space.World);
+
+        if (Input.GetKeyDown(KeyCode.E))
+            Collect();
+        else if (Input.GetKeyDown(KeyCode.Escape) || Input.GetMouseButtonDown(1))
+            StopInspection();
+    }
+
+    private void StopInspection()
+    {
+        _isInspecting = false;
+        IsAnyItemInspecting = false;
+        transform.SetParent(_originalParent, true);
+        transform.position = _originalPosition;
+        transform.rotation = _originalRotation;
+
+        SetCollidersEnabled(true);
+
+        if (_playerController != null)
+            _playerController.SetInputEnabled(true);
+
+        if (_playerInRange)
+            ShowPrompt(true);
+    }
 
     private void Collect()
     {
-        _collected     = true;
+        _collected = true;
         _playerInRange = false;
-
+        _isInspecting = false;
+        IsAnyItemInspecting = false;
         ShowPrompt(false);
+        SetCollidersEnabled(false);
 
-        // Tell the GameManager an item was found
-        bool allCollected = GameManager.Instance.OnItemCollected();
+        if (_playerController != null)
+            _playerController.SetInputEnabled(true);
 
-        Debug.Log($"[ItemPickup] Collected: {itemName}. All collected: {allCollected}");
+        if (grantsKey)
+            GameManager.Instance.AddKey(keyId);
 
-        // Play the pickup sound at this position before the object is destroyed.
-        // PlayClipAtPoint spawns a temporary AudioSource so the sound
-        // finishes even after the GameObject is gone.
+        string displayName = GetDisplayName();
+
+        if (addToInventory)
+            CollectionInventory.AddItem(displayName, grantsKey ? keyId : itemName, inventoryIcon);
+
+        SendMessage("OnItemCollectedByPlayer", SendMessageOptions.DontRequireReceiver);
+
+        string message = string.IsNullOrWhiteSpace(collectionMessage)
+            ? $"{displayName} has been collected."
+            : collectionMessage;
+
+        if (collectionMessageRequiresEsc)
+            CollectionInventory.ShowEscMessage(message);
+        else if (showCollectionMessageAtBottom)
+            CollectionInventory.ShowBottomMessage(message);
+        else
+            CollectionInventory.ShowMessage(message);
+
+        GameManager.Instance.OnItemCollected();
+
         if (pickupSound != null)
             AudioSource.PlayClipAtPoint(pickupSound, transform.position, pickupVolume);
 
-        // Disable instead of Destroy so the sound has time to play
         gameObject.SetActive(false);
     }
-
-    // ── UI Helper ──────────────────────────────────────────────────────────
 
     private void ShowPrompt(bool show)
     {
         if (promptObject != null)
             promptObject.SetActive(show);
+    }
+
+    private bool IsLookedAt()
+    {
+        if (!allowLookInteraction)
+            return false;
+
+        Camera camera = Camera.main;
+        if (camera == null)
+            return false;
+
+        Ray ray = new Ray(camera.transform.position, camera.transform.forward);
+        if (!Physics.Raycast(ray, out RaycastHit hit, interactDistance, ~0, QueryTriggerInteraction.Collide))
+            return false;
+
+        return hit.transform == transform || hit.transform.IsChildOf(transform);
+    }
+
+    private static bool IsPlayerCollider(Collider other)
+    {
+        return other.CompareTag("Player") || other.GetComponentInParent<PlayerController>() != null;
+    }
+
+    private void SetCollidersEnabled(bool enabled)
+    {
+        if (_colliders == null)
+            return;
+
+        foreach (Collider itemCollider in _colliders)
+        {
+            if (itemCollider != null)
+                itemCollider.enabled = enabled;
+        }
+    }
+
+    private string GetDisplayName()
+    {
+        string source = itemName;
+        if (string.IsNullOrWhiteSpace(source) || source == "Key")
+            source = name;
+
+        return ObjectNameToDisplayName(source);
+    }
+
+    private static string ObjectNameToDisplayName(string source)
+    {
+        source = source.Replace("_", " ");
+        System.Text.StringBuilder result = new System.Text.StringBuilder();
+
+        for (int i = 0; i < source.Length; i++)
+        {
+            char current = source[i];
+            if (i > 0 && char.IsUpper(current) && !char.IsWhiteSpace(source[i - 1]))
+                result.Append(' ');
+
+            result.Append(current);
+        }
+
+        return result.ToString().Trim();
     }
 }

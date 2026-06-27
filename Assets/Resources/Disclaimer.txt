@@ -2,6 +2,16 @@ CrimsonNightfall contains flashing lights, loud sounds, sudden audio, and horror
 
 Photosensitive players and players sensitive to frightening content should use discretion.
 
+Tips:
+Having trouble finding the items needed in game or understanding what to do to win and survive? 
+Make sure to utilize the crouch button, CTRL, in order to get down and search lower areas as a key or useful item may
+be sitting on the floor, the bottom of a rack, a chair seat, and more.
+
+Do you keep dying to the entity?
+The entity is hyper sensitive to light!! It will instantly know where you are if you shine your flashlight near it!!
+Try to crouch behind objects to be out of its field-of-view, or listen for its footsteps or the opening of doors.
+Of course, the best survival trick is to hide in closets, but make sure to do it optimally.
+
 Developer note to players:
 This is my first personal videogame creation project, and I've made sure to thoroughly test it so that there aren't any game
 breaking features present within gameplay. Personally as a gamer, I do try to find bugs in games, so I would expect some of you to 

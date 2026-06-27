@@ -21,7 +21,6 @@ public class EntityModelRoot : MonoBehaviour
         {
             _startX = 0f;
             _startZ = 0f;
-            Debug.Log($"[EntityModelRoot] Locking root bone: {_rootBone.name}");
         }
         else
         {

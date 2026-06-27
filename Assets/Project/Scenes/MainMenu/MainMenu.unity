@@ -124,6 +124,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1001}
   - component: {fileID: 1002}
+  - component: {fileID: 1003}
   m_Layer: 0
   m_Name: MainMenuController
   m_TagString: Untagged
@@ -158,6 +159,19 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 0454e0c896684b938f025e9464546430, type: 3}
   m_Name:
   m_EditorClassIdentifier: Assembly-CSharp::MainMenuController
+  mainMenuMusic: {fileID: 8300000, guid: 22ac5580f79a5a145809f91fae3964e9, type: 3}
+  mainMenuMusicVolume: 0.65
+  musicFadeOutDuration: 1.5
+  menuButtonReleasedSound: {fileID: 8300000, guid: 26bdc2dea6e62f0439f2f8ef52c09997, type: 3}
+  menuButtonReleasedVolume: 1
+--- !u!81 &1003
+AudioListener:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1000}
+  m_Enabled: 1
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

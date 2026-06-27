@@ -10,6 +10,14 @@ public class RoomDoorController : MonoBehaviour
     [SerializeField] private float interactionRange = 3f;
     [SerializeField] [Range(5f, 90f)] private float interactionAngle = 35f;
 
+    [Header("Lock")]
+    [SerializeField] private bool startsLocked;
+    [SerializeField] private string requiredKeyId = "RoomKey";
+    [SerializeField] private AudioClip lockedSound;
+    [SerializeField] private string lockedDoorMessage = "It seems these doors are locked. Maybe there is a key somewhere.";
+    [SerializeField] private string hiddenStudyLockedMessage = "It seems these doors are locked. Maybe there is another way in.";
+    [SerializeField] private string keyNotSelectedMessage = "Select the correct key in your inventory first.";
+
     [Header("Door Swing")]
     [SerializeField] private float openAngle = 95f;
     [SerializeField] private float rotationSpeed = 120f;
@@ -25,12 +33,17 @@ public class RoomDoorController : MonoBehaviour
     private float _currentAngle;
     private float _targetAngle;
     private bool _initialized;
+    private bool _isLocked;
     private AudioSource _audioSource;
 
     public bool IsOpen => Mathf.Abs(_targetAngle) > 0.1f;
+    public bool IsLocked => _isLocked;
 
     private void Awake()
     {
+        _isLocked = startsLocked;
+        if (!_isLocked && GameManager.Instance != null)
+            GameManager.Instance.MarkDoorUnlocked(name);
         Initialize();
     }
 
@@ -50,7 +63,7 @@ public class RoomDoorController : MonoBehaviour
         AnimateDoor();
 
         if (Input.GetKeyDown(KeyCode.E) && FindFocusedDoor() == this)
-            Toggle();
+            TryToggleForPlayer();
     }
 
     public void Toggle()
@@ -59,18 +72,71 @@ public class RoomDoorController : MonoBehaviour
         PlaySound(IsOpen ? openSound : closeSound);
     }
 
+    public bool TryOpenForAI(Vector3 openerPosition)
+    {
+        if (_isLocked || IsOpen || !_initialized)
+            return false;
+
+        _targetAngle = ChooseOpeningAngle(openerPosition);
+        PlaySound(openSound);
+        return true;
+    }
+
+    public static void OpenNearbyForAI(Vector3 position, float radius)
+    {
+        float radiusSquared = radius * radius;
+        foreach (RoomDoorController door in Doors)
+        {
+            if (door == null || door._isLocked || door.IsOpen || !door._initialized)
+                continue;
+
+            if (door._bounds.SqrDistance(position) <= radiusSquared)
+                door.TryOpenForAI(position);
+        }
+    }
+
+    private void TryToggleForPlayer()
+    {
+        if (_isLocked)
+        {
+            if (GameManager.Instance == null || !GameManager.Instance.HasKey(requiredKeyId))
+            {
+                PlaySound(lockedSound);
+                CollectionInventory.ShowBottomMessage(GetLockedMessage());
+                return;
+            }
+
+            if (!CollectionInventory.IsSelected(requiredKeyId))
+            {
+                PlaySound(lockedSound);
+                CollectionInventory.ShowBottomMessage(keyNotSelectedMessage);
+                return;
+            }
+
+            _isLocked = false;
+            GameManager.Instance.MarkDoorUnlocked(name);
+        }
+
+        Toggle();
+    }
+
     private float ChooseOpeningAngle()
     {
         Camera camera = Camera.main;
         if (camera == null)
             return openAngle;
 
+        return ChooseOpeningAngle(camera.transform.position);
+    }
+
+    private float ChooseOpeningAngle(Vector3 openerPosition)
+    {
         Vector3 centerOffset = _bounds.center - _hingePoint;
         Vector3 positiveCenter = _hingePoint + Quaternion.AngleAxis(openAngle, Vector3.up) * centerOffset;
         Vector3 negativeCenter = _hingePoint + Quaternion.AngleAxis(-openAngle, Vector3.up) * centerOffset;
 
-        float positiveDistance = Vector3.SqrMagnitude(positiveCenter - camera.transform.position);
-        float negativeDistance = Vector3.SqrMagnitude(negativeCenter - camera.transform.position);
+        float positiveDistance = Vector3.SqrMagnitude(positiveCenter - openerPosition);
+        float negativeDistance = Vector3.SqrMagnitude(negativeCenter - openerPosition);
         return positiveDistance >= negativeDistance ? openAngle : -openAngle;
     }
 
@@ -127,6 +193,18 @@ public class RoomDoorController : MonoBehaviour
             return;
 
         _audioSource.PlayOneShot(clip, volume);
+    }
+
+    private string GetLockedMessage()
+    {
+        return IsHiddenStudyDoor()
+            ? hiddenStudyLockedMessage
+            : lockedDoorMessage;
+    }
+
+    private bool IsHiddenStudyDoor()
+    {
+        return name == "HiddenStudy_Door_Left" || name == "HiddenStudy_Door_Right";
     }
 
     private static RoomDoorController FindFocusedDoor()

@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.UI;
 
 /// <summary>
 /// Handles first-person movement: walk, sprint, crouch, and mouse look.
@@ -16,6 +17,14 @@ public class PlayerController : MonoBehaviour
     [SerializeField] private float sprintSpeed  = 6.5f;
     [SerializeField] private float crouchSpeed  = 1.5f;
     [SerializeField] private float gravity      = -15f;
+
+    [Header("Sprint Meter")]
+    [SerializeField] private float sprintDuration = 7f;
+    [SerializeField] private float sprintRechargeDuration = 7f;
+    [SerializeField] [Range(0f, 1f)] private float sprintRestartThreshold = 0.33f;
+    [SerializeField] private float sprintMeterFadeSpeed = 5f;
+    [SerializeField] private Vector2 sprintMeterAnchorMin = new Vector2(0.40f, 0.035f);
+    [SerializeField] private Vector2 sprintMeterAnchorMax = new Vector2(0.60f, 0.070f);
 
     [Header("Crouch")]
     [SerializeField] private float standHeight       = 1.8f;
@@ -40,8 +49,14 @@ public class PlayerController : MonoBehaviour
     private float               _targetCameraY;      // camera local Y we're lerping toward
     private bool                _isCrouching;
     private bool                _isSprinting;
+    private bool                _wantsSprint;
     private bool                _sprintToggled;
     private bool                _crouchToggled;
+    private bool                _sprintLockedUntilReleased;
+    private float               _sprintEnergy;
+    private CanvasGroup         _sprintMeterGroup;
+    private Image               _sprintMeterFill;
+    private RectTransform       _sprintMeterFillRect;
 
     // ── Unity Lifecycle ────────────────────────────────────────────────────
 
@@ -50,8 +65,10 @@ public class PlayerController : MonoBehaviour
         _controller    = GetComponent<CharacterController>();
         _targetHeight  = standHeight;
         _targetCameraY = standCameraHeight;
+        _sprintEnergy  = Mathf.Max(0.01f, sprintDuration);
 
         ActivatePlayerCamera();
+        BuildSprintMeter();
 
         // Lock and hide the cursor for first-person look
         Cursor.lockState = CursorLockMode.Locked;
@@ -92,6 +109,7 @@ public class PlayerController : MonoBehaviour
         HandleCrouch();
         HandleMovement();
         HandleMouseLook();
+        UpdateSprintMeter();
     }
 
     // ── Movement ───────────────────────────────────────────────────────────
@@ -104,6 +122,9 @@ public class PlayerController : MonoBehaviour
 
         // Build a local-space direction vector and transform it to world space
         Vector3 moveDirection = transform.right * horizontal + transform.forward * vertical;
+        bool isMoving = moveDirection.sqrMagnitude > 0.01f;
+
+        UpdateSprintEnergy(isMoving);
 
         // Only one speed mode is active at a time; crouching overrides sprinting
         float speed = _isCrouching ? crouchSpeed
@@ -143,13 +164,14 @@ public class PlayerController : MonoBehaviour
         {
             _isCrouching   = true;
             _isSprinting   = false;
+            _wantsSprint   = false;
             _targetHeight  = crouchHeight;
             _targetCameraY = crouchCameraHeight;
         }
         else if (!IsObstructedAbove())
         {
             _isCrouching   = false;
-            _isSprinting   = wantSprint;
+            _wantsSprint   = wantSprint;
             _targetHeight  = standHeight;
             _targetCameraY = standCameraHeight;
         }
@@ -177,6 +199,111 @@ public class PlayerController : MonoBehaviour
         Vector3 topPoint = transform.position + Vector3.up * crouchHeight;
         float   checkDistance = standHeight - crouchHeight + 0.05f;
         return Physics.Raycast(topPoint, Vector3.up, checkDistance);
+    }
+
+    private void UpdateSprintEnergy(bool isMoving)
+    {
+        float maxEnergy = Mathf.Max(0.01f, sprintDuration);
+        float rechargeDuration = Mathf.Max(0.01f, sprintRechargeDuration);
+        float energyPercent = Mathf.Clamp01(_sprintEnergy / maxEnergy);
+        bool wasSprinting = _isSprinting;
+
+        if (_sprintLockedUntilReleased && energyPercent >= sprintRestartThreshold)
+            _sprintLockedUntilReleased = false;
+
+        bool canSprint = !_isCrouching &&
+                         _wantsSprint &&
+                         isMoving &&
+                         !_sprintLockedUntilReleased &&
+                         _sprintEnergy > 0f &&
+                         (wasSprinting || energyPercent >= sprintRestartThreshold);
+
+        _isSprinting = canSprint;
+
+        if (_isSprinting)
+        {
+            _sprintEnergy = Mathf.Max(0f, _sprintEnergy - Time.deltaTime);
+
+            if (_sprintEnergy <= 0f)
+            {
+                _isSprinting = false;
+                _sprintLockedUntilReleased = true;
+                _sprintToggled = false;
+            }
+        }
+        else
+        {
+            _sprintEnergy = Mathf.Min(maxEnergy, _sprintEnergy + (maxEnergy / rechargeDuration) * Time.deltaTime);
+        }
+    }
+
+    private void BuildSprintMeter()
+    {
+        GameObject canvasObject = new GameObject("Sprint Meter Canvas", typeof(RectTransform));
+        canvasObject.transform.SetParent(transform, false);
+
+        Canvas canvas = canvasObject.AddComponent<Canvas>();
+        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        canvas.sortingOrder = 70;
+
+        CanvasScaler scaler = canvasObject.AddComponent<CanvasScaler>();
+        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        scaler.referenceResolution = new Vector2(1920f, 1080f);
+        scaler.matchWidthOrHeight = 0.5f;
+
+        GameObject meterObject = new GameObject("Sprint Meter", typeof(RectTransform));
+        meterObject.transform.SetParent(canvasObject.transform, false);
+
+        RectTransform meterRect = meterObject.GetComponent<RectTransform>();
+        meterRect.anchorMin = sprintMeterAnchorMin;
+        meterRect.anchorMax = sprintMeterAnchorMax;
+        meterRect.offsetMin = Vector2.zero;
+        meterRect.offsetMax = Vector2.zero;
+
+        _sprintMeterGroup = meterObject.AddComponent<CanvasGroup>();
+        _sprintMeterGroup.alpha = 0f;
+
+        Image background = meterObject.AddComponent<Image>();
+        background.color = new Color(0.02f, 0.025f, 0.03f, 0.78f);
+
+        Outline outline = meterObject.AddComponent<Outline>();
+        outline.effectColor = new Color(0.48f, 0.48f, 0.48f, 0.95f);
+        outline.effectDistance = new Vector2(2f, -2f);
+
+        GameObject fillObject = new GameObject("Fill", typeof(RectTransform));
+        fillObject.transform.SetParent(meterObject.transform, false);
+
+        RectTransform fillRect = fillObject.GetComponent<RectTransform>();
+        fillRect.anchorMin = new Vector2(0f, 0f);
+        fillRect.anchorMax = new Vector2(1f, 1f);
+        fillRect.offsetMin = new Vector2(4f, 4f);
+        fillRect.offsetMax = new Vector2(-4f, -4f);
+        fillRect.pivot = new Vector2(0f, 0.5f);
+        _sprintMeterFillRect = fillRect;
+
+        _sprintMeterFill = fillObject.AddComponent<Image>();
+        _sprintMeterFill.color = new Color(0.48f, 0.88f, 1f, 0.88f);
+    }
+
+    private void UpdateSprintMeter()
+    {
+        if (_sprintMeterGroup == null || _sprintMeterFillRect == null)
+            return;
+
+        float maxEnergy = Mathf.Max(0.01f, sprintDuration);
+        float energyPercent = Mathf.Clamp01(_sprintEnergy / maxEnergy);
+        _sprintMeterFillRect.anchorMax = new Vector2(energyPercent, 1f);
+        _sprintMeterFillRect.offsetMax = new Vector2(-4f, -4f);
+
+        if (_sprintMeterFill != null)
+            _sprintMeterFill.enabled = energyPercent > 0.001f;
+
+        bool shouldShow = _isSprinting;
+        float targetAlpha = shouldShow ? 1f : 0f;
+        _sprintMeterGroup.alpha = Mathf.MoveTowards(
+            _sprintMeterGroup.alpha,
+            targetAlpha,
+            sprintMeterFadeSpeed * Time.unscaledDeltaTime);
     }
 
     // ── Mouse Look ─────────────────────────────────────────────────────────
@@ -211,7 +338,17 @@ public class PlayerController : MonoBehaviour
             // Stop any leftover horizontal motion
             _velocity.x = 0f;
             _velocity.z = 0f;
+            _isSprinting = false;
+            _wantsSprint = false;
         }
+    }
+
+    public void ResetVerticalLook()
+    {
+        _verticalRotation = 0f;
+
+        if (playerCamera != null)
+            playerCamera.transform.localRotation = Quaternion.identity;
     }
 
     public bool IsCrouching  => _isCrouching;

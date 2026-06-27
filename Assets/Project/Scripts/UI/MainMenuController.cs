@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.SceneManagement;
@@ -7,23 +8,47 @@ public class MainMenuController : MonoBehaviour
 {
     private const string NormalGameplayScene = "SampleScene";
     private const string BackgroundResource = "TitleScreenBackground";
+    private const int MaxTitleBackgrounds = 8;
+    private const float SlideshowInterval = 5f;
 
     private static readonly Color Crimson = new Color(0.72f, 0.035f, 0.055f);
     private static readonly Color Pale = new Color(0.88f, 0.86f, 0.84f);
     private static readonly Color Dim = new Color(0.40f, 0.40f, 0.40f);
     private static readonly Color Panel = new Color(0.025f, 0.025f, 0.028f, 0.96f);
 
+    [Header("Menu Music")]
+    [SerializeField] private AudioClip mainMenuMusic;
+    [SerializeField] [Range(0f, 1f)] private float mainMenuMusicVolume = 0.15f;
+    [SerializeField] private float musicFadeOutDuration = 1.5f;
+
+    [Header("Menu SFX")]
+    [SerializeField] private AudioClip menuButtonReleasedSound;
+    [SerializeField] [Range(0f, 1f)] private float menuButtonReleasedVolume = 1f;
+
     private Font _font;
     private GameObject _mainPage;
     private GameObject _modePage;
     private GameObject _controlsPage;
     private GameObject _modal;
+    private GameObject _modalScrollView;
     private Text _description;
     private Text _modalTitle;
     private Text _modalBody;
+    private ScrollRect _modalScrollRect;
     private Button _startButton;
+    private Button _chaosButton;
+    private Text _chaosLabel;
     private Image _normalBorder;
     private Image _chaosBorder;
+    private Image _topTitleImage;
+    private Image _bottomTitleImage;
+    private Sprite[] _titleSprites;
+    private int _slideshowIndex;
+    private float _slideshowTimer;
+    private Coroutine _lockedChaosRoutine;
+    private AudioSource _menuMusicSource;
+    private AudioSource _menuSfxSource;
+    private bool _loadingGameplay;
 
     private void Awake()
     {
@@ -34,11 +59,15 @@ public class MainMenuController : MonoBehaviour
         GameSettings.Apply();
 
         _font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        EnsureAudioListener();
         BuildInterface();
+        StartMenuMusic();
     }
 
     private void Update()
     {
+        UpdateTitleSlideshow();
+
         if (Input.GetKeyDown(KeyCode.Escape))
         {
             if (_modal.activeSelf)
@@ -92,22 +121,7 @@ public class MainMenuController : MonoBehaviour
 
     private void BuildMainPage(Transform parent)
     {
-        Image photo = CreateImage(parent, "Title Screen Background", new Color(0.12f, 0.12f, 0.12f));
-        SetAnchors(photo.rectTransform, new Vector2(0.5f, 0f), Vector2.one);
-
-        Sprite suppliedImage = LoadBackgroundSprite();
-        if (suppliedImage != null)
-        {
-            photo.sprite = suppliedImage;
-            photo.preserveAspect = true;
-            photo.color = Color.white;
-        }
-        else
-        {
-            Text placeholder = CreateText(photo.transform, "Background Placeholder",
-                "ADD YOUR IN-GAME PHOTO AS\nAssets/Resources/TitleScreenBackground.png", 24, Dim, TextAnchor.MiddleCenter);
-            Stretch(placeholder.rectTransform);
-        }
+        BuildTitleImagePanels(parent);
 
         Image shade = CreateImage(parent, "Image Shade", new Color(0f, 0f, 0f, 0.30f));
         SetAnchors(shade.rectTransform, new Vector2(0.5f, 0f), Vector2.one);
@@ -115,6 +129,10 @@ public class MainMenuController : MonoBehaviour
         Image divider = CreateImage(parent, "Crimson Divider", Crimson);
         SetAnchors(divider.rectTransform, new Vector2(0.5f, 0f), new Vector2(0.5f, 1f));
         divider.rectTransform.sizeDelta = new Vector2(3f, 0f);
+
+        Image imageDivider = CreateImage(parent, "Image Middle Divider", Crimson);
+        SetAnchors(imageDivider.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(1f, 0.5f));
+        imageDivider.rectTransform.sizeDelta = new Vector2(0f, 3f);
 
         Text title = CreateText(parent, "Title", "CrimsonNightfall", 72, Crimson, TextAnchor.MiddleCenter);
         Place(title.rectTransform, new Vector2(0.5f, 0.87f), new Vector2(900f, 110f));
@@ -142,6 +160,35 @@ public class MainMenuController : MonoBehaviour
         version.rectTransform.sizeDelta = new Vector2(400f, 40f);
     }
 
+    private void BuildTitleImagePanels(Transform parent)
+    {
+        _titleSprites = LoadBackgroundSprites();
+
+        _topTitleImage = CreateTitleImage(parent, "Title Screen Background Top",
+            new Vector2(0.5f, 0.5f), Vector2.one);
+        _bottomTitleImage = CreateTitleImage(parent, "Title Screen Background Bottom",
+            new Vector2(0.5f, 0f), new Vector2(1f, 0.5f));
+
+        if (_titleSprites.Length == 0)
+        {
+            Text placeholder = CreateText(_topTitleImage.transform, "Background Placeholder",
+                "ADD YOUR IN-GAME PHOTOS AS\nAssets/Resources/TitleScreenBackground.png\nAssets/Resources/TitleScreenBackground2.png",
+                24, Dim, TextAnchor.MiddleCenter);
+            Stretch(placeholder.rectTransform);
+            return;
+        }
+
+        ApplyTitleSlides();
+    }
+
+    private Image CreateTitleImage(Transform parent, string name, Vector2 anchorMin, Vector2 anchorMax)
+    {
+        Image image = CreateImage(parent, name, new Color(0.12f, 0.12f, 0.12f));
+        SetAnchors(image.rectTransform, anchorMin, anchorMax);
+        image.preserveAspect = true;
+        return image;
+    }
+
     private void BuildModePage(Transform parent)
     {
         Image vignette = CreateImage(parent, "Mode Background", new Color(0.015f, 0.015f, 0.018f));
@@ -156,7 +203,7 @@ public class MainMenuController : MonoBehaviour
         Place(instruction.rectTransform, new Vector2(0.5f, 0.80f), new Vector2(700f, 40f));
 
         _normalBorder = AddModeButton(parent, "NORMAL", new Vector2(0.30f, 0.65f), GameMode.Normal);
-        _chaosBorder = AddModeButton(parent, "CHAOS", new Vector2(0.70f, 0.65f), GameMode.Chaos);
+        _chaosBorder = AddModeButton(parent, "CHAOTIC", new Vector2(0.70f, 0.65f), GameMode.Chaos);
 
         Image descriptionPanel = CreateImage(parent, "Description Panel", Panel);
         Place(descriptionPanel.rectTransform, new Vector2(0.5f, 0.40f), new Vector2(1000f, 220f));
@@ -196,6 +243,7 @@ public class MainMenuController : MonoBehaviour
             "<b>WASD</b>   -   Move\n\n" +
             "<b>E</b>   -   Interact / Pickup\n\n" +
             "<b>F</b>   -   Flashlight Toggle\n\n" +
+            "<b>TAB</b>   -   Inventory\n\n" +
             "<b>SHIFT</b>   -   Sprint\n\n" +
             "<b>CTRL</b>   -   Crouch";
 
@@ -228,17 +276,55 @@ public class MainMenuController : MonoBehaviour
         SetAnchors(_modalTitle.rectTransform, new Vector2(0.1f, 0.77f), new Vector2(0.9f, 0.95f));
         _modalTitle.fontStyle = FontStyle.Bold;
 
-        _modalBody = CreateText(box.transform, "Modal Body", string.Empty, 23, Pale, TextAnchor.MiddleCenter);
-        SetAnchors(_modalBody.rectTransform, new Vector2(0.10f, 0.16f), new Vector2(0.90f, 0.76f));
+        BuildModalScrollView(box.transform);
 
         Button close = CreateButton(box.transform, "CLOSE", () => _modal.SetActive(false), new Vector2(260f, 62f), 20);
         Place(close.GetComponent<RectTransform>(), new Vector2(0.5f, 0.10f), new Vector2(260f, 62f));
+    }
+
+    private void BuildModalScrollView(Transform parent)
+    {
+        _modalScrollView = CreateRect("Modal Scroll View", parent);
+        SetAnchors(_modalScrollView.GetComponent<RectTransform>(), new Vector2(0.10f, 0.16f), new Vector2(0.90f, 0.76f));
+
+        _modalScrollRect = _modalScrollView.AddComponent<ScrollRect>();
+        _modalScrollRect.horizontal = false;
+        _modalScrollRect.vertical = true;
+        _modalScrollRect.movementType = ScrollRect.MovementType.Clamped;
+        _modalScrollRect.scrollSensitivity = 38f;
+
+        GameObject viewportObject = CreateRect("Viewport", _modalScrollView.transform);
+        RectTransform viewport = viewportObject.GetComponent<RectTransform>();
+        SetAnchors(viewport, Vector2.zero, new Vector2(0.93f, 1f));
+        viewportObject.AddComponent<RectMask2D>();
+        _modalScrollRect.viewport = viewport;
+
+        _modalBody = CreateText(viewport, "Modal Body", string.Empty, 23, Pale, TextAnchor.UpperLeft);
+        _modalBody.horizontalOverflow = HorizontalWrapMode.Wrap;
+        _modalBody.verticalOverflow = VerticalWrapMode.Overflow;
+        _modalBody.supportRichText = true;
+        _modalBody.raycastTarget = false;
+        RectTransform bodyRect = _modalBody.rectTransform;
+        bodyRect.anchorMin = new Vector2(0f, 1f);
+        bodyRect.anchorMax = new Vector2(1f, 1f);
+        bodyRect.pivot = new Vector2(0.5f, 1f);
+        bodyRect.anchoredPosition = Vector2.zero;
+        bodyRect.sizeDelta = Vector2.zero;
+
+        _modalScrollRect.content = bodyRect;
+
+        Scrollbar scrollbar = CreateVerticalScrollbar(_modalScrollView.transform);
+        _modalScrollRect.verticalScrollbar = scrollbar;
+        _modalScrollRect.verticalScrollbarVisibility = ScrollRect.ScrollbarVisibility.Permanent;
+        _modalScrollRect.verticalScrollbarSpacing = 12f;
     }
 
     private void ShowSettings()
     {
         ShowModal("SETTINGS", string.Empty);
         _modalBody.gameObject.SetActive(false);
+        if (_modalScrollView != null)
+            _modalScrollView.SetActive(false);
 
         Transform panel = _modalTitle.transform.parent;
         Transform oldSettings = panel.Find("Settings Controls");
@@ -268,10 +354,45 @@ public class MainMenuController : MonoBehaviour
         if (settings != null)
             Destroy(settings.gameObject);
 
+        if (_lockedChaosRoutine != null)
+        {
+            StopCoroutine(_lockedChaosRoutine);
+            _lockedChaosRoutine = null;
+        }
+
         _modalTitle.text = title;
         _modalBody.text = body;
         _modalBody.gameObject.SetActive(true);
+        if (_modalScrollView != null)
+            _modalScrollView.SetActive(true);
+
         _modal.SetActive(true);
+        RefreshModalBodyLayout();
+    }
+
+    private void RefreshModalBodyLayout()
+    {
+        if (_modalScrollRect == null || _modalScrollRect.viewport == null || _modalBody == null)
+            return;
+
+        Canvas.ForceUpdateCanvases();
+
+        RectTransform viewport = _modalScrollRect.viewport;
+        RectTransform bodyRect = _modalBody.rectTransform;
+        float viewportWidth = Mathf.Max(1f, viewport.rect.width - 12f);
+        float viewportHeight = Mathf.Max(1f, viewport.rect.height);
+
+        bodyRect.anchorMin = new Vector2(0f, 1f);
+        bodyRect.anchorMax = new Vector2(0f, 1f);
+        bodyRect.pivot = new Vector2(0f, 1f);
+        bodyRect.anchoredPosition = Vector2.zero;
+        bodyRect.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, viewportWidth);
+
+        Canvas.ForceUpdateCanvases();
+
+        float preferredHeight = Mathf.Max(viewportHeight, _modalBody.preferredHeight + 8f);
+        bodyRect.SetSizeWithCurrentAnchors(RectTransform.Axis.Vertical, preferredHeight);
+        _modalScrollRect.verticalNormalizedPosition = 1f;
     }
 
     private void ShowMainPage()
@@ -288,10 +409,17 @@ public class MainMenuController : MonoBehaviour
         _modePage.SetActive(true);
         _controlsPage.SetActive(false);
         _modal.SetActive(false);
+        RefreshChaosLockState();
     }
 
     private void SelectMode(GameMode mode)
     {
+        if (mode == GameMode.Chaos && !ChaoticModeProgress.IsChaoticModeUnlocked)
+        {
+            ShowLockedChaosHint();
+            return;
+        }
+
         GameModeSettings.Select(mode);
         _startButton.interactable = true;
 
@@ -302,6 +430,69 @@ public class MainMenuController : MonoBehaviour
         _description.text = normal
             ? "Normal stamina consumption, basic entity field-of-view and aggression, normal physics, item placement simplified."
             : "Faster stamina consumption, greater entity field-of-view and aggression, objects will move when collided with by chasing entity, item placement more difficult.";
+    }
+
+    private void RefreshChaosLockState()
+    {
+        bool unlocked = ChaoticModeProgress.IsChaoticModeUnlocked;
+
+        if (_chaosLabel != null)
+        {
+            _chaosLabel.text = unlocked ? "CHAOTIC" : "CHAOTIC\nLOCKED";
+            _chaosLabel.color = unlocked ? Pale : Dim;
+        }
+
+        if (_chaosBorder != null && GameModeSettings.SelectedMode != GameMode.Chaos)
+            _chaosBorder.color = unlocked ? new Color(0.18f, 0.18f, 0.18f) : new Color(0.09f, 0.09f, 0.09f);
+    }
+
+    private void ShowLockedChaosHint()
+    {
+        if (_lockedChaosRoutine != null)
+            StopCoroutine(_lockedChaosRoutine);
+
+        _lockedChaosRoutine = StartCoroutine(LockedChaosHintRoutine());
+    }
+
+    private IEnumerator LockedChaosHintRoutine()
+    {
+        _startButton.interactable = false;
+        GameModeSettings.Clear();
+        _normalBorder.color = new Color(0.18f, 0.18f, 0.18f);
+        RefreshChaosLockState();
+
+        yield return FadeDescription("???", 1f);
+        yield return new WaitForSecondsRealtime(0.65f);
+        yield return FadeDescription("dive deeper... reveal the truth...", 1f);
+        yield return new WaitForSecondsRealtime(2f);
+        yield return FadeDescription("???", 1f);
+
+        _lockedChaosRoutine = null;
+    }
+
+    private IEnumerator FadeDescription(string nextText, float duration)
+    {
+        Color color = _description.color;
+        float halfDuration = Mathf.Max(0.01f, duration * 0.5f);
+
+        for (float elapsed = 0f; elapsed < halfDuration; elapsed += Time.unscaledDeltaTime)
+        {
+            color.a = Mathf.Lerp(1f, 0f, elapsed / halfDuration);
+            _description.color = color;
+            yield return null;
+        }
+
+        _description.text = nextText;
+
+        for (float elapsed = 0f; elapsed < halfDuration; elapsed += Time.unscaledDeltaTime)
+        {
+            color.a = Mathf.Lerp(0f, 1f, elapsed / halfDuration);
+            _description.color = color;
+            yield return null;
+        }
+
+        color.a = 1f;
+        _description.color = color;
     }
 
     private void StartSelectedMode()
@@ -316,10 +507,104 @@ public class MainMenuController : MonoBehaviour
 
     private void LoadGameplay()
     {
-        if (GameModeSettings.SelectedMode == GameMode.Normal)
-            SceneManager.LoadScene(NormalGameplayScene);
-        else
-            SceneManager.LoadScene(NormalGameplayScene);
+        if (_loadingGameplay)
+            return;
+
+        StartCoroutine(LoadGameplayAfterMusicFade());
+    }
+
+    private IEnumerator LoadGameplayAfterMusicFade()
+    {
+        _loadingGameplay = true;
+        SetMenuButtonsInteractable(false);
+
+        if (_menuMusicSource != null && _menuMusicSource.isPlaying && musicFadeOutDuration > 0f)
+        {
+            float startVolume = _menuMusicSource.volume;
+            for (float elapsed = 0f; elapsed < musicFadeOutDuration; elapsed += Time.unscaledDeltaTime)
+            {
+                _menuMusicSource.volume = Mathf.Lerp(startVolume, 0f, elapsed / musicFadeOutDuration);
+                yield return null;
+            }
+
+            _menuMusicSource.volume = 0f;
+            _menuMusicSource.Stop();
+        }
+
+        SceneManager.LoadScene(NormalGameplayScene);
+    }
+
+    private void StartMenuMusic()
+    {
+        if (mainMenuMusic == null)
+            return;
+
+        _menuMusicSource = GetComponent<AudioSource>();
+        if (_menuMusicSource == null)
+            _menuMusicSource = gameObject.AddComponent<AudioSource>();
+
+        _menuMusicSource.clip = mainMenuMusic;
+        _menuMusicSource.volume = mainMenuMusicVolume;
+        _menuMusicSource.loop = true;
+        _menuMusicSource.playOnAwake = false;
+        _menuMusicSource.spatialBlend = 0f;
+        _menuMusicSource.Play();
+    }
+
+    private void PlayMenuButtonReleasedSound()
+    {
+        if (menuButtonReleasedSound == null || _loadingGameplay)
+            return;
+
+        if (_menuSfxSource == null)
+        {
+            _menuSfxSource = gameObject.AddComponent<AudioSource>();
+            _menuSfxSource.playOnAwake = false;
+            _menuSfxSource.spatialBlend = 0f;
+        }
+
+        _menuSfxSource.PlayOneShot(menuButtonReleasedSound, menuButtonReleasedVolume);
+    }
+
+    private void EnsureAudioListener()
+    {
+        if (FindFirstObjectByType<AudioListener>() != null)
+            return;
+
+        gameObject.AddComponent<AudioListener>();
+    }
+
+    private void SetMenuButtonsInteractable(bool interactable)
+    {
+        foreach (Button button in GetComponentsInChildren<Button>(true))
+            button.interactable = interactable;
+    }
+
+    private void UpdateTitleSlideshow()
+    {
+        if (_titleSprites == null || _titleSprites.Length <= 2 || _topTitleImage == null || _bottomTitleImage == null)
+            return;
+
+        _slideshowTimer += Time.unscaledDeltaTime;
+        if (_slideshowTimer < SlideshowInterval)
+            return;
+
+        _slideshowTimer = 0f;
+        _slideshowIndex = (_slideshowIndex + 2) % _titleSprites.Length;
+        ApplyTitleSlides();
+    }
+
+    private void ApplyTitleSlides()
+    {
+        if (_titleSprites == null || _titleSprites.Length == 0)
+            return;
+
+        _topTitleImage.sprite = _titleSprites[_slideshowIndex % _titleSprites.Length];
+        _topTitleImage.color = Color.white;
+
+        int bottomIndex = _titleSprites.Length > 1 ? (_slideshowIndex + 1) % _titleSprites.Length : _slideshowIndex;
+        _bottomTitleImage.sprite = _titleSprites[bottomIndex];
+        _bottomTitleImage.color = Color.white;
     }
 
     private static void ExitGame()
@@ -345,6 +630,13 @@ public class MainMenuController : MonoBehaviour
 
         Button button = CreateButton(border.transform, label, () => SelectMode(mode), new Vector2(430f, 120f), 30);
         Place(button.GetComponent<RectTransform>(), new Vector2(0.5f, 0.5f), new Vector2(430f, 120f));
+
+        if (mode == GameMode.Chaos)
+        {
+            _chaosButton = button;
+            _chaosLabel = button.GetComponentInChildren<Text>();
+        }
+
         return border;
     }
 
@@ -367,6 +659,7 @@ public class MainMenuController : MonoBehaviour
         colors.fadeDuration = 0.10f;
         button.colors = colors;
         button.onClick.AddListener(action);
+        AddButtonReleaseSound(buttonObject, button);
         buttonObject.GetComponent<RectTransform>().sizeDelta = size;
 
         AddOutline(buttonObject, new Color(0.30f, 0.30f, 0.30f), new Vector2(1f, -1f));
@@ -375,6 +668,23 @@ public class MainMenuController : MonoBehaviour
         Stretch(text.rectTransform);
         text.fontStyle = FontStyle.Bold;
         return button;
+    }
+
+    private void AddButtonReleaseSound(GameObject buttonObject, Button button)
+    {
+        EventTrigger trigger = buttonObject.AddComponent<EventTrigger>();
+        EventTrigger.Entry pointerUp = new EventTrigger.Entry
+        {
+            eventID = EventTriggerType.PointerUp
+        };
+
+        pointerUp.callback.AddListener(_ =>
+        {
+            if (button != null && button.interactable)
+                PlayMenuButtonReleasedSound();
+        });
+
+        trigger.triggers.Add(pointerUp);
     }
 
     private Slider CreateSlider(Transform parent)
@@ -404,6 +714,34 @@ public class MainMenuController : MonoBehaviour
         slider.targetGraphic = handle;
         slider.direction = Slider.Direction.LeftToRight;
         return slider;
+    }
+
+    private Scrollbar CreateVerticalScrollbar(Transform parent)
+    {
+        GameObject root = CreateRect("Scrollbar", parent);
+        Image background = root.AddComponent<Image>();
+        background.color = new Color(0.11f, 0.11f, 0.12f, 0.95f);
+        RectTransform rootRect = root.GetComponent<RectTransform>();
+        SetAnchors(rootRect, new Vector2(0.975f, 0f), new Vector2(1f, 1f));
+
+        Scrollbar scrollbar = root.AddComponent<Scrollbar>();
+        scrollbar.direction = Scrollbar.Direction.BottomToTop;
+
+        Image handle = CreateImage(root.transform, "Handle", Crimson);
+        RectTransform handleRect = handle.rectTransform;
+        Stretch(handleRect);
+
+        RectTransform slidingArea = CreateRect("Sliding Area", root.transform).GetComponent<RectTransform>();
+        Stretch(slidingArea);
+        slidingArea.offsetMin = new Vector2(3f, 3f);
+        slidingArea.offsetMax = new Vector2(-3f, -3f);
+        handle.transform.SetParent(slidingArea, false);
+
+        scrollbar.targetGraphic = handle;
+        scrollbar.handleRect = handleRect;
+        scrollbar.size = 0.2f;
+        scrollbar.value = 1f;
+        return scrollbar;
     }
 
     private void AddSliderSetting(Transform parent, string label, float rowY, float value,
@@ -524,13 +862,36 @@ public class MainMenuController : MonoBehaviour
         return content != null ? content.text : resourceName + " text is missing.";
     }
 
-    private static Sprite LoadBackgroundSprite()
+    private static Sprite[] LoadBackgroundSprites()
     {
-        Sprite sprite = Resources.Load<Sprite>(BackgroundResource);
+        Sprite[] sprites = new Sprite[MaxTitleBackgrounds];
+        int count = 0;
+
+        for (int i = 0; i < MaxTitleBackgrounds; i++)
+        {
+            string resourceName = i == 0 ? BackgroundResource : BackgroundResource + (i + 1);
+            Sprite sprite = LoadBackgroundSprite(resourceName);
+            if (sprite == null)
+                continue;
+
+            sprites[count] = sprite;
+            count++;
+        }
+
+        Sprite[] result = new Sprite[count];
+        for (int i = 0; i < count; i++)
+            result[i] = sprites[i];
+
+        return result;
+    }
+
+    private static Sprite LoadBackgroundSprite(string resourceName)
+    {
+        Sprite sprite = Resources.Load<Sprite>(resourceName);
         if (sprite != null)
             return sprite;
 
-        Texture2D texture = Resources.Load<Texture2D>(BackgroundResource);
+        Texture2D texture = Resources.Load<Texture2D>(resourceName);
         if (texture == null)
             return null;
 

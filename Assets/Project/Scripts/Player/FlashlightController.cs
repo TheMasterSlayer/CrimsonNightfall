@@ -42,7 +42,5 @@ public class FlashlightController : MonoBehaviour
 
         if (clickSound != null)
             AudioSource.PlayClipAtPoint(clickSound, transform.position, clickVolume);
-
-        Debug.Log($"[Flashlight] {(_light.enabled ? "ON" : "OFF")}");
     }
 }

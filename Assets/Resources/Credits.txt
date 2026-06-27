@@ -5,7 +5,84 @@ Level design by TheMasterSlayer
 
 Add team members, asset creators, music credits, and special thanks here.
 
-Thank you to all the asset creators:
+Thank you to all the asset creators and more:
 
 Sketchfab:
 Wood Door - exiS7-Gs
+Electronic Fuse - Zillious
+Key - Mr NISHKE
+Key - Gektark
+Crowbar - triadams
+Adjustable Spanner/Wrench
+Electric meter - Sousinho
+Lever With Animation - LeeMoorhead
+Elevator Buttons - darksoundlab
+Elevator Control Panel - dev.mansaf
+Weekly Closet Animation - HaruCreatezstufz
+Stylized Key - kajindd
+Elaina (The Witch's Journey) - ScarletJadeDream
+Maxwell the cat with bones animation - Zhuier
+SCP-096: Unity - Smiley Man
+
+Unity Asset Store:
+Backrooms Entity SFX (Vol. 2) - juanjo_sound
+Wood Planks (Various) - Aegis
+FPS Horror Game Starter Pack - Gazobella
+Kitchen Set (Interior) - Geniuscrate games
+URP Tree Models - ALIyerEdon
+WindowsAndDoorsPack01 - Mr Andrew Chapman
+Persiang Carpets (URP) - CGPAL
+Free Fire VFX (URP) - Vefects
+Furniture FREE Pack - DEXSOFT
+Picture frames with photos - 3Dfrk
+Animated Old Chest - NOT_Lonely
+WoodenProps 3D - logicalbeat
+Old Game Stylized Props Pack - reach the enD
+Garage Props Set - Abandoned World
+Stylized Dungeon Props Pack - CobraGamesAssets
+Medieval props - Lukas Bobor
+RPG Food Props DEMO - Aparicio Silva
+Industrial Props Kit - Universal Assets
+Alchemy Lab Props - Mana Station
+Cheval Mirror - AK STUDIO ART
+Radio - AK STUDIO ART
+Wood Bucket: Standard + Dirty - Kaiba
+Modular Dining Kit - Red Blue Pixel Studio
+VINTAGE LIVING ROOM 3D GAME PACK -  ZNS3D
+Computer corner tables - Maximalist
+Furniture used set - Maximalist
+Flashlight - RRFreelance
+PBR - Hospital Horror Pack. Free - DNK_DEV
+WatchTower Demo Props Crate & Barrel - Peter3DCreations
+Horror Starter Pack FREE - INSTANT ZOOMIES
+Flooded Grounds - Sandro T
+
+
+Freesound.org and more:
+Door Locked - BenjaminNelan
+WavesAudioDoorOpenSFX - MAVOM22
+Door_Open - N-RAZM
+Door close - soundmary
+SCP-096 Director's Cut Mod Crying - FuzzReflectionDry31189
+SCP-096 Director's Cut Mod Enrage - FuzzReflectionDry31189
+SCP-096 Customized Raging Audio - FuzzReflectionDry31189
+SCP-096 Customized Kill Audio - FuzzReflectionDry31189
+Fire alarm 15.09.2017 Summertown House - Halfofthesky
+Flashlight.wav - morganpurkis
+Closet Door.wav - RutgerMuller
+sliding_door_closing.wav - joedeshon
+grab-item - 1bob
+Button 9.mp3 - Coral_Island_Studios
+inserting_key_4 - Dragon20C
+Dropping, Wood, L.wav - InspectorJ
+Old Lever Pull - DrMinky
+WrenchFiddle.wav - Latawoo
+Fuze Switch Flick - LordForklift
+neon stereo buzzer box buzz hum stereo close lowcut to taste.flac - kyles
+elevator button press.aiff - mredig
+Elevator Button.wav - paulfabb
+Elevator door 04.wav - LG
+Rumbling Elevator - NachtmahrTV
+ding.wav - tim.kahn
+Scary Ambience - jacksonacademyashmore
+ButtonPress.wav - BigDino1995

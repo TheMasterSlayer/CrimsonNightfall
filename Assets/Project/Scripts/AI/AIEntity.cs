@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.AI;
 
@@ -16,7 +17,7 @@ public class AIEntity : MonoBehaviour
 {
     // ── State Machine ──────────────────────────────────────────────────────
 
-    private enum State { Patrolling, Chasing, Returning }
+    private enum State { Patrolling, Chasing, LostPlayerPause, Returning }
 
     // ── Inspector Settings ─────────────────────────────────────────────────
 
@@ -36,6 +37,12 @@ public class AIEntity : MonoBehaviour
 
     [Header("Chase")]
     [SerializeField] private float losePlayerDelay = 3f; // seconds before giving up chase
+    [SerializeField] private float lostPlayerIdleTime = 3f; // seconds to stand still before returning to patrol
+    [SerializeField] private float chaseDestinationSampleRadius = 2f;
+
+    [Header("Doors")]
+    [SerializeField] private float doorOpenRange = 2.25f;
+    [SerializeField] private float doorCheckInterval = 0.15f;
 
     [Header("Flashlight Detection")]
     [SerializeField] private float flashlightDetectionRange = 25f;
@@ -46,6 +53,10 @@ public class AIEntity : MonoBehaviour
 
     [Header("Jumpscare")]
     [SerializeField] private JumpscareController _jumpscareController;
+
+    [Header("Debug")]
+    [SerializeField] private bool debugElevatorAI;
+    [SerializeField] private float debugElevatorAILogInterval = 0.75f;
 
     // ── Private State ──────────────────────────────────────────────────────
 
@@ -63,12 +74,17 @@ public class AIEntity : MonoBehaviour
 
     private Vector3 _lastKnownPlayerPos;
     private float   _losePlayerTimer    = 0f;
+    private float   _lostPlayerIdleTimer = 0f;
+    private float   _doorCheckTimer     = 0f;
+    private float   _nextElevatorDebugLogTime = 0f;
 
     // ── Unity Lifecycle ────────────────────────────────────────────────────
 
     private void Awake()
     {
         _agent = GetComponent<NavMeshAgent>();
+        DiscoverWaypoints();
+        ElevatorAIZone.EnsureRuntimeZones();
 
         GameObject playerObj = GameObject.FindWithTag("Player");
         if (playerObj != null)
@@ -81,6 +97,7 @@ public class AIEntity : MonoBehaviour
 
     private void Start()
     {
+        SyncRestrictedWaypointStates();
         SetState(State.Patrolling);
     }
 
@@ -89,6 +106,8 @@ public class AIEntity : MonoBehaviour
         if (GameManager.Instance == null || GameManager.Instance.IsGameOver) return;
         if (_isCatching) return;
 
+        SyncRestrictedWaypointStates();
+        UpdateNearbyDoors();
         _canSeePlayer = CheckLineOfSight() || CheckFlashlightDetection();
 
         // Drive animation speed from actual agent velocity
@@ -99,8 +118,21 @@ public class AIEntity : MonoBehaviour
         {
             case State.Patrolling: UpdatePatrol();  break;
             case State.Chasing:   UpdateChase();   break;
+            case State.LostPlayerPause: UpdateLostPlayerPause(); break;
             case State.Returning: UpdateReturn();  break;
         }
+    }
+
+    private void UpdateNearbyDoors()
+    {
+        _doorCheckTimer -= Time.deltaTime;
+        if (_doorCheckTimer > 0f)
+            return;
+
+        _doorCheckTimer = doorCheckInterval;
+        Vector3 checkPosition = transform.position + transform.forward * (doorOpenRange * 0.5f);
+        RoomDoorController.OpenNearbyForAI(checkPosition, doorOpenRange);
+        RightRoomDoorController.OpenNearbyForAI(checkPosition, doorOpenRange);
     }
 
     // ── State Updates ──────────────────────────────────────────────────────
@@ -113,7 +145,11 @@ public class AIEntity : MonoBehaviour
             return;
         }
 
-        if (waypoints.Length == 0) return;
+        if (waypoints.Length == 0 || FindNearestWaypointIndex() < 0)
+        {
+            _agent.ResetPath();
+            return;
+        }
 
         if (_waitingAtWaypoint)
         {
@@ -135,11 +171,43 @@ public class AIEntity : MonoBehaviour
 
     private void UpdateChase()
     {
+        if (_player != null &&
+            ElevatorAIZone.TryGetZoneForPosition(_player.position, out ElevatorAIZone elevatorZone))
+        {
+            _losePlayerTimer = losePlayerDelay;
+
+            if (elevatorZone.BlocksAI)
+            {
+                Vector3 waitPosition = elevatorZone.GetWaitPosition(transform.position);
+                _lastKnownPlayerPos = waitPosition;
+                _agent.SetDestination(waitPosition);
+                elevatorZone.LogAIWait(transform.position, waitPosition);
+                LogElevatorDebug(
+                    $"Player is inside blocked elevator zone '{elevatorZone.name}' for '{elevatorZone.ElevatorName}'. " +
+                    $"Destination={waitPosition}, PathStatus={_agent.pathStatus}, RemainingDistance={_agent.remainingDistance}");
+                return;
+            }
+
+            Vector3 chasePosition = GetReachableChasePosition(_player.position);
+            _lastKnownPlayerPos = chasePosition;
+            bool destinationSet = _agent.SetDestination(chasePosition);
+            LogElevatorDebug(
+                $"Player is inside OPEN elevator zone '{elevatorZone.name}' for '{elevatorZone.ElevatorName}'. " +
+                $"Chasing into elevator. RawPlayerPosition={_player.position}, Destination={chasePosition}, " +
+                $"DestinationSet={destinationSet}, PathStatus={_agent.pathStatus}, RemainingDistance={_agent.remainingDistance}");
+
+            if (Vector3.Distance(transform.position, _player.position) <= catchDistance)
+                TriggerCatch();
+
+            return;
+        }
+
         if (_canSeePlayer)
         {
-            _lastKnownPlayerPos = _player.position;
+            Vector3 chasePosition = GetReachableChasePosition(_player.position);
+            _lastKnownPlayerPos = chasePosition;
             _losePlayerTimer    = losePlayerDelay;
-            _agent.SetDestination(_player.position);
+            _agent.SetDestination(chasePosition);
 
             if (Vector3.Distance(transform.position, _player.position) <= catchDistance)
                 TriggerCatch();
@@ -151,8 +219,29 @@ public class AIEntity : MonoBehaviour
             _losePlayerTimer -= Time.deltaTime;
 
             if (_losePlayerTimer <= 0f)
-                SetState(State.Returning);
+                SetState(State.LostPlayerPause);
         }
+    }
+
+    private Vector3 GetReachableChasePosition(Vector3 desiredPosition)
+    {
+        if (NavMesh.SamplePosition(desiredPosition, out NavMeshHit hit, chaseDestinationSampleRadius, NavMesh.AllAreas))
+            return hit.position;
+
+        return desiredPosition;
+    }
+
+    private void UpdateLostPlayerPause()
+    {
+        if (_canSeePlayer)
+        {
+            SetState(State.Chasing);
+            return;
+        }
+
+        _lostPlayerIdleTimer -= Time.deltaTime;
+        if (_lostPlayerIdleTimer <= 0f)
+            SetState(State.Returning);
     }
 
     private void UpdateReturn()
@@ -196,10 +285,26 @@ public class AIEntity : MonoBehaviour
         Vector3    playerChest = _player.position   + Vector3.up * 1.0f;
         RaycastHit hit;
 
-        if (Physics.Linecast(eyePos, playerChest, out hit))
-            return hit.transform.CompareTag("Player");
+        if (Physics.Linecast(eyePos, playerChest, out hit, ~0, QueryTriggerInteraction.Ignore))
+        {
+            bool hitPlayer = IsPlayerHit(hit.transform);
+            LogElevatorDebug(
+                $"Visibility ray sees '{hit.transform.name}' on '{hit.collider.gameObject.name}'. " +
+                $"HitPlayer={hitPlayer}, PlayerCrouching={(_playerController != null && _playerController.IsCrouching)}");
+            return hitPlayer;
+        }
 
         return true;
+    }
+
+    private bool IsPlayerHit(Transform hitTransform)
+    {
+        if (hitTransform == null || _player == null)
+            return false;
+
+        return hitTransform == _player ||
+               hitTransform.IsChildOf(_player) ||
+               hitTransform.CompareTag("Player");
     }
 
     // ── Flashlight Detection ───────────────────────────────────────────────
@@ -221,7 +326,6 @@ public class AIEntity : MonoBehaviour
 
         if (angle > flashlightDetectionAngle) return false;
 
-        Debug.Log("[AI] Flashlight spotted — chasing!");
         return true;
     }
 
@@ -234,28 +338,40 @@ public class AIEntity : MonoBehaviour
         switch (newState)
         {
             case State.Patrolling:
+                _agent.isStopped = false;
                 _agent.speed = patrolSpeed;
                 if (_animator != null) _animator.SetBool("IsChasing", false);
-                if (waypoints.Length > 0)
+                _waypointIndex = FindNearestWaypointIndex();
+                if (_waypointIndex >= 0)
                     _agent.SetDestination(waypoints[_waypointIndex].position);
-                Debug.Log("[AI] Resuming patrol.");
                 break;
 
             case State.Chasing:
+                _agent.isStopped  = false;
                 _agent.speed        = chaseSpeed;
                 _lastKnownPlayerPos = _player.position;
                 _losePlayerTimer    = losePlayerDelay;
                 if (_animator != null) _animator.SetBool("IsChasing", true);
-                Debug.Log("[AI] Player spotted — chasing!");
+                break;
+
+            case State.LostPlayerPause:
+                _agent.isStopped = true;
+                _agent.ResetPath();
+                _lostPlayerIdleTimer = lostPlayerIdleTime;
+                if (_animator != null)
+                {
+                    _animator.SetBool("IsChasing", false);
+                    _animator.SetFloat("Speed", 0f);
+                }
                 break;
 
             case State.Returning:
+                _agent.isStopped = false;
                 _agent.speed    = patrolSpeed;
                 _waypointIndex  = FindNearestWaypointIndex();
                 if (_animator != null) _animator.SetBool("IsChasing", false);
-                if (waypoints.Length > 0)
+                if (_waypointIndex >= 0)
                     _agent.SetDestination(waypoints[_waypointIndex].position);
-                Debug.Log("[AI] Lost the player. Returning to patrol route.");
                 break;
         }
     }
@@ -265,6 +381,8 @@ public class AIEntity : MonoBehaviour
     private void TriggerCatch()
     {
         _isCatching = true;
+        CollectionInventory.ForceCloseInventory();
+        ClosetHide.CancelAllClosetTransitionsForCaughtPlayer();
 
         // Stop the AI moving
         _agent.isStopped = true;
@@ -294,30 +412,117 @@ public class AIEntity : MonoBehaviour
 
     private void AdvanceWaypoint()
     {
-        int next = _waypointIndex;
-        while (next == _waypointIndex && waypoints.Length > 1)
-            next = Random.Range(0, waypoints.Length);
+        var available = new List<int>();
+        for (int i = 0; i < waypoints.Length; i++)
+        {
+            if (i != _waypointIndex && IsWaypointAvailable(waypoints[i]))
+                available.Add(i);
+        }
 
-        _waypointIndex = next;
+        if (available.Count == 0)
+        {
+            if (_waypointIndex >= 0 && IsWaypointAvailable(waypoints[_waypointIndex]))
+                return;
+
+            _waypointIndex = FindNearestWaypointIndex();
+            if (_waypointIndex < 0)
+                return;
+        }
+        else
+        {
+            _waypointIndex = available[Random.Range(0, available.Count)];
+        }
+
         _agent.SetDestination(waypoints[_waypointIndex].position);
     }
 
     private int FindNearestWaypointIndex()
     {
-        if (waypoints.Length == 0) return 0;
+        if (waypoints.Length == 0) return -1;
 
-        int   nearest  = 0;
+        int   nearest  = -1;
         float shortest = float.MaxValue;
 
         for (int i = 0; i < waypoints.Length; i++)
         {
+            if (!IsWaypointAvailable(waypoints[i]))
+                continue;
+
             float dist = Vector3.Distance(transform.position, waypoints[i].position);
             if (dist < shortest) { shortest = dist; nearest = i; }
         }
         return nearest;
     }
 
+    private void DiscoverWaypoints()
+    {
+        GameObject waypointRoot = GameObject.Find("Waypoints");
+        if (waypointRoot == null)
+            return;
+
+        var discovered = new List<Transform>();
+        foreach (Transform waypoint in waypointRoot.transform)
+            discovered.Add(waypoint);
+
+        if (discovered.Count > 0)
+            waypoints = discovered.ToArray();
+    }
+
+    private static bool IsWaypointAvailable(Transform waypoint)
+    {
+        return waypoint != null && waypoint.gameObject.activeInHierarchy;
+    }
+
+    private void SyncRestrictedWaypointStates()
+    {
+        GameManager gameManager = GameManager.Instance;
+        if (gameManager == null)
+            return;
+
+        foreach (Transform waypoint in waypoints)
+        {
+            if (waypoint == null)
+                continue;
+
+            bool? shouldBeActive = GetRestrictedWaypointState(waypoint.name, gameManager);
+            if (shouldBeActive.HasValue && waypoint.gameObject.activeSelf != shouldBeActive.Value)
+                waypoint.gameObject.SetActive(shouldBeActive.Value);
+        }
+    }
+
+    private static bool? GetRestrictedWaypointState(string waypointName, GameManager gameManager)
+    {
+        switch (waypointName)
+        {
+            case "WP_Library":
+                return gameManager.IsDoorUnlocked("Library_Door");
+
+            case "WP_WineCellar":
+                return gameManager.IsDoorUnlocked("WineCellar_Door");
+
+            case "WP_MasterBedroom":
+                return gameManager.IsDoorUnlocked("MasterBedroom_Door_Left") ||
+                       gameManager.IsDoorUnlocked("MasterBedroom_Door_Right");
+
+            case "WP_HiddenStudy":
+                return gameManager.IsDoorUnlocked("HiddenStudy_Door_Left") ||
+                       gameManager.IsDoorUnlocked("HiddenStudy_Door_Right");
+
+            default:
+                return null;
+        }
+    }
+
     // ── Editor Gizmos ──────────────────────────────────────────────────────
+
+    private void LogElevatorDebug(string message)
+    {
+        if (!debugElevatorAI || Time.time < _nextElevatorDebugLogTime)
+            return;
+
+        _nextElevatorDebugLogTime = Time.time + Mathf.Max(0.05f, debugElevatorAILogInterval);
+        Debug.Log($"[AIEntity Visibility] {message}", this);
+    }
 
     private void OnDrawGizmosSelected()
     {
