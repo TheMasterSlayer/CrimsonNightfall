@@ -6,12 +6,17 @@ using UnityEngine.AI;
 [DisallowMultipleComponent]
 public class SCP096PropPusher : MonoBehaviour
 {
+    [Header("Roots")]
+    [SerializeField] private string propsRootPrefix = "Props";
+    [SerializeField] private string[] exactRootNames = { "SCP_Props", "Items", "Hiding_Area_1", "Hiding_Area_2" };
+    [SerializeField] private bool autoAddPhysicsToMainChildren = true;
+
     [Header("Detection")]
-    [SerializeField] private string propRootName = "SCP_Props";
     [SerializeField] private float impactRadius = 2.25f;
     [SerializeField] private float impactForwardOffset = 1.1f;
     [SerializeField] private bool onlyPushWhileChasing = true;
     [SerializeField] private float propHitCooldown = 0.08f;
+    [SerializeField] [Min(0.01f)] private float physicsCheckInterval = 0.05f;
 
     [Header("Impact")]
     [SerializeField] private float baseImpactForce = 85f;
@@ -25,24 +30,39 @@ public class SCP096PropPusher : MonoBehaviour
     private readonly Dictionary<SCPPropPhysicsObject, float> _nextHitTime = new Dictionary<SCPPropPhysicsObject, float>();
     private Collider[] _scpColliders;
     private SCP096Controller _controller;
+    private SCP096MansionEnemy _mansionEnemy;
     private NavMeshAgent _agent;
-    private Transform _propRoot;
+    private readonly List<Transform> _roots = new List<Transform>();
+    private float _nextPhysicsCheckTime;
 
     private void Awake()
     {
         _controller = GetComponent<SCP096Controller>();
+        _mansionEnemy = GetComponent<SCP096MansionEnemy>();
         _agent = GetComponent<NavMeshAgent>();
         _scpColliders = GetComponentsInChildren<Collider>(true);
-        CachePropRoot();
+        CacheRoots();
+
+        if (autoAddPhysicsToMainChildren)
+            PrepareMainChildren();
     }
 
     private void Update()
     {
-        if (onlyPushWhileChasing && (_controller == null || !_controller.IsChasing))
+        if (onlyPushWhileChasing && !IsChasing())
             return;
 
-        if (_propRoot == null)
-            CachePropRoot();
+        if (Time.time < _nextPhysicsCheckTime)
+            return;
+
+        _nextPhysicsCheckTime = Time.time + physicsCheckInterval;
+
+        if (_roots.Count == 0)
+        {
+            CacheRoots();
+            if (autoAddPhysicsToMainChildren)
+                PrepareMainChildren();
+        }
 
         Vector3 center = transform.position + transform.forward * impactForwardOffset;
         Collider[] hits = Physics.OverlapSphere(center, impactRadius, ~0, QueryTriggerInteraction.Ignore);
@@ -72,20 +92,12 @@ public class SCP096PropPusher : MonoBehaviour
         }
     }
 
-    private bool IsUnderPropRoot(Transform target)
+    private bool IsChasing()
     {
-        if (_propRoot == null)
+        if (_controller != null && _controller.IsChasing)
             return true;
 
-        while (target != null)
-        {
-            if (target == _propRoot)
-                return true;
-
-            target = target.parent;
-        }
-
-        return false;
+        return _mansionEnemy != null && _mansionEnemy.IsChasing;
     }
 
     private SCPPropPhysicsObject GetMainPropForCollider(Collider hit)
@@ -93,23 +105,31 @@ public class SCP096PropPusher : MonoBehaviour
         if (hit == null)
             return null;
 
-        if (_propRoot == null)
-            return hit.GetComponentInParent<SCPPropPhysicsObject>();
+        foreach (Transform root in _roots)
+        {
+            Transform directChild = GetDirectChildUnderRoot(hit.transform, root);
+            if (directChild != null)
+                return directChild.GetComponent<SCPPropPhysicsObject>();
+        }
 
-        Transform current = hit.transform;
-        Transform directChild = null;
+        return null;
+    }
+
+    private Transform GetDirectChildUnderRoot(Transform target, Transform root)
+    {
+        if (target == null || root == null)
+            return null;
+
+        Transform current = target;
         while (current != null)
         {
-            if (current.parent == _propRoot)
-            {
-                directChild = current;
-                break;
-            }
+            if (current.parent == root)
+                return current;
 
             current = current.parent;
         }
 
-        return directChild != null ? directChild.GetComponent<SCPPropPhysicsObject>() : null;
+        return null;
     }
 
     private IEnumerator TemporarilyIgnoreCollision(SCPPropPhysicsObject prop)
@@ -140,10 +160,60 @@ public class SCP096PropPusher : MonoBehaviour
         }
     }
 
-    private void CachePropRoot()
+    private void CacheRoots()
     {
-        GameObject root = GameObject.Find(propRootName);
-        _propRoot = root != null ? root.transform : null;
+        _roots.Clear();
+        Transform[] transforms = FindObjectsByType<Transform>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+
+        foreach (Transform candidate in transforms)
+        {
+            if (candidate != null && IsAllowedRootName(candidate.name))
+                _roots.Add(candidate);
+        }
+    }
+
+    private bool IsAllowedRootName(string rootName)
+    {
+        if (!string.IsNullOrWhiteSpace(propsRootPrefix) && rootName.StartsWith(propsRootPrefix))
+            return true;
+
+        if (exactRootNames == null)
+            return false;
+
+        foreach (string exactRootName in exactRootNames)
+        {
+            if (!string.IsNullOrWhiteSpace(exactRootName) && rootName == exactRootName)
+                return true;
+        }
+
+        return false;
+    }
+
+    private void PrepareMainChildren()
+    {
+        foreach (Transform root in _roots)
+        {
+            if (root == null)
+                continue;
+
+            foreach (Transform child in root)
+            {
+                if (child == null || !HasPropSurface(child))
+                    continue;
+
+                SCPPropPhysicsObject prop = child.GetComponent<SCPPropPhysicsObject>();
+                if (prop == null)
+                    prop = child.gameObject.AddComponent<SCPPropPhysicsObject>();
+
+                prop.RefreshPhysicsProfile();
+            }
+        }
+    }
+
+    private bool HasPropSurface(Transform target)
+    {
+        return target.GetComponentInChildren<Renderer>(true) != null ||
+               target.GetComponentInChildren<Collider>(true) != null;
     }
 
     private void OnDrawGizmosSelected()

@@ -6,7 +6,8 @@ using UnityEngine.UI;
 
 public class MainMenuController : MonoBehaviour
 {
-    private const string NormalGameplayScene = "SampleScene";
+    private const string NormalGameplayScene = "Normal_Mode";
+    private const string ChaosGameplayScene = "Chaos_Mode";
     private const string BackgroundResource = "TitleScreenBackground";
     private const int MaxTitleBackgrounds = 8;
     private const float SlideshowInterval = 5f;
@@ -153,11 +154,6 @@ public class MainMenuController : MonoBehaviour
         AddMenuButton(menu, "DISCLAIMER", () => ShowModal("DISCLAIMER", LoadMenuText("Disclaimer")));
         AddMenuButton(menu, "EXIT", ExitGame);
 
-        Text version = CreateText(parent, "Footer", "A HORROR EXPERIENCE", 16,
-            new Color(0.55f, 0.55f, 0.55f), TextAnchor.MiddleLeft);
-        SetAnchors(version.rectTransform, Vector2.zero, Vector2.zero);
-        version.rectTransform.anchoredPosition = new Vector2(40f, 28f);
-        version.rectTransform.sizeDelta = new Vector2(400f, 40f);
     }
 
     private void BuildTitleImagePanels(Transform parent)
@@ -327,32 +323,65 @@ public class MainMenuController : MonoBehaviour
             _modalScrollView.SetActive(false);
 
         Transform panel = _modalTitle.transform.parent;
-        Transform oldSettings = panel.Find("Settings Controls");
-        if (oldSettings != null)
-            Destroy(oldSettings.gameObject);
+        ClearModalCustomControls(panel);
 
         Transform settings = CreateRect("Settings Controls", panel).transform;
-        SetAnchors(settings.GetComponent<RectTransform>(), new Vector2(0.12f, 0.17f), new Vector2(0.88f, 0.76f));
+        SetAnchors(settings.GetComponent<RectTransform>(), new Vector2(0.12f, 0.24f), new Vector2(0.88f, 0.76f));
 
-        AddSliderSetting(settings, "MASTER VOLUME", 0.86f, GameSettings.MasterVolume,
+        AddSliderSetting(settings, "MASTER VOLUME", 0.88f, GameSettings.MasterVolume,
             value => GameSettings.MasterVolume = value);
-        AddSliderSetting(settings, "MOUSE SENSITIVITY", 0.66f, GameSettings.MouseSensitivity,
+        AddSliderSetting(settings, "MOUSE SENSITIVITY", 0.70f, GameSettings.MouseSensitivity,
             value => GameSettings.MouseSensitivity = value, 0.25f, 2f);
-        AddToggleSetting(settings, "SPRINT TOGGLE", 0.47f, GameSettings.SprintToggle,
+        AddToggleSetting(settings, "SPRINT TOGGLE", 0.52f, GameSettings.SprintToggle,
             value => GameSettings.SprintToggle = value);
-        AddToggleSetting(settings, "CROUCH TOGGLE", 0.31f, GameSettings.CrouchToggle,
+        AddToggleSetting(settings, "CROUCH TOGGLE", 0.35f, GameSettings.CrouchToggle,
             value => GameSettings.CrouchToggle = value);
-        AddToggleSetting(settings, "INVERT LOOK Y", 0.15f, GameSettings.InvertY,
+        AddToggleSetting(settings, "INVERT LOOK Y", 0.18f, GameSettings.InvertY,
             value => GameSettings.InvertY = value);
-        AddToggleSetting(settings, "FULLSCREEN", 0f, GameSettings.Fullscreen,
+        AddToggleSetting(settings, "FULLSCREEN", 0.01f, GameSettings.Fullscreen,
             value => GameSettings.Fullscreen = value);
+
+        Button easterEggs = CreateButton(panel, "EASTER EGG TOGGLES", ShowEasterEggToggles, new Vector2(360f, 52f), 18);
+        Place(easterEggs.GetComponent<RectTransform>(), new Vector2(0.5f, 0.185f), new Vector2(360f, 52f));
+    }
+
+    private void ShowEasterEggToggles()
+    {
+        ShowModal("EASTER EGG TOGGLES", string.Empty);
+        _modalBody.gameObject.SetActive(false);
+        if (_modalScrollView != null)
+            _modalScrollView.SetActive(false);
+
+        Transform panel = _modalTitle.transform.parent;
+        ClearModalCustomControls(panel);
+
+        Transform toggles = CreateRect("Easter Egg Controls", panel).transform;
+        SetAnchors(toggles.GetComponent<RectTransform>(), new Vector2(0.12f, 0.24f), new Vector2(0.88f, 0.70f));
+
+        AddEasterEggToggle(
+            toggles,
+            EasterEggSettings.IsNormalRainbowEntityUnlocked ? "Normal Mode Rainbow Entity." : "???",
+            0.66f,
+            EasterEggSettings.IsNormalRainbowEntityUnlocked,
+            EasterEggSettings.NormalRainbowEntityEnabled,
+            value => EasterEggSettings.NormalRainbowEntityEnabled = value);
+
+        AddEasterEggToggle(
+            toggles,
+            EasterEggSettings.IsScpEntitySwitchUnlocked ? "SCP Entity Switch" : "???",
+            0.30f,
+            EasterEggSettings.IsScpEntitySwitchUnlocked,
+            EasterEggSettings.ScpEntitySwitchEnabled,
+            value => EasterEggSettings.ScpEntitySwitchEnabled = value);
+
+        Button back = CreateButton(panel, "BACK TO SETTINGS", ShowSettings, new Vector2(320f, 52f), 18);
+        Place(back.GetComponent<RectTransform>(), new Vector2(0.5f, 0.185f), new Vector2(320f, 52f));
     }
 
     private void ShowModal(string title, string body)
     {
-        Transform settings = _modalTitle != null ? _modalTitle.transform.parent.Find("Settings Controls") : null;
-        if (settings != null)
-            Destroy(settings.gameObject);
+        Transform panel = _modalTitle != null ? _modalTitle.transform.parent : null;
+        ClearModalCustomControls(panel);
 
         if (_lockedChaosRoutine != null)
         {
@@ -368,6 +397,28 @@ public class MainMenuController : MonoBehaviour
 
         _modal.SetActive(true);
         RefreshModalBodyLayout();
+    }
+
+    private void ClearModalCustomControls(Transform panel)
+    {
+        if (panel == null)
+            return;
+
+        Transform settings = panel.Find("Settings Controls");
+        if (settings != null)
+            Destroy(settings.gameObject);
+
+        Transform easterEggs = panel.Find("Easter Egg Controls");
+        if (easterEggs != null)
+            Destroy(easterEggs.gameObject);
+
+        Transform easterEggButton = panel.Find("EASTER EGG TOGGLES Button");
+        if (easterEggButton != null)
+            Destroy(easterEggButton.gameObject);
+
+        Transform backButton = panel.Find("BACK TO SETTINGS Button");
+        if (backButton != null)
+            Destroy(backButton.gameObject);
     }
 
     private void RefreshModalBodyLayout()
@@ -420,6 +471,7 @@ public class MainMenuController : MonoBehaviour
             return;
         }
 
+        CancelLockedChaosHint();
         GameModeSettings.Select(mode);
         _startButton.interactable = true;
 
@@ -444,6 +496,22 @@ public class MainMenuController : MonoBehaviour
 
         if (_chaosBorder != null && GameModeSettings.SelectedMode != GameMode.Chaos)
             _chaosBorder.color = unlocked ? new Color(0.18f, 0.18f, 0.18f) : new Color(0.09f, 0.09f, 0.09f);
+    }
+
+    private void CancelLockedChaosHint()
+    {
+        if (_lockedChaosRoutine == null)
+            return;
+
+        StopCoroutine(_lockedChaosRoutine);
+        _lockedChaosRoutine = null;
+
+        if (_description != null)
+        {
+            Color color = _description.color;
+            color.a = 1f;
+            _description.color = color;
+        }
     }
 
     private void ShowLockedChaosHint()
@@ -531,7 +599,14 @@ public class MainMenuController : MonoBehaviour
             _menuMusicSource.Stop();
         }
 
-        SceneManager.LoadScene(NormalGameplayScene);
+        SceneManager.LoadScene(GetSelectedGameplayScene());
+    }
+
+    private string GetSelectedGameplayScene()
+    {
+        return GameModeSettings.SelectedMode == GameMode.Chaos
+            ? ChaosGameplayScene
+            : NormalGameplayScene;
     }
 
     private void StartMenuMusic()
@@ -769,6 +844,21 @@ public class MainMenuController : MonoBehaviour
         SetAnchors(toggle.GetComponent<RectTransform>(), new Vector2(0.47f, rowY + 0.015f),
             new Vector2(0.55f, rowY + 0.105f));
         toggle.isOn = value;
+        toggle.onValueChanged.AddListener(action);
+    }
+
+    private void AddEasterEggToggle(Transform parent, string label, float rowY, bool unlocked, bool value,
+        UnityEngine.Events.UnityAction<bool> action)
+    {
+        Color labelColor = unlocked ? Pale : Dim;
+        Text settingLabel = CreateText(parent, label + " Label", label, 22, labelColor, TextAnchor.MiddleLeft);
+        SetAnchors(settingLabel.rectTransform, new Vector2(0f, rowY), new Vector2(0.72f, rowY + 0.16f));
+
+        Toggle toggle = CreateToggle(parent);
+        SetAnchors(toggle.GetComponent<RectTransform>(), new Vector2(0.80f, rowY + 0.035f),
+            new Vector2(0.90f, rowY + 0.135f));
+        toggle.interactable = unlocked;
+        toggle.isOn = unlocked && value;
         toggle.onValueChanged.AddListener(action);
     }
 

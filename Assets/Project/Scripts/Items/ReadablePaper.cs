@@ -11,6 +11,9 @@ public class ReadablePaper : MonoBehaviour
     [SerializeField] private bool grantsChaoticModeInsight;
     [SerializeField] private string chaoticInsightMessage = "you gained insight on Chaotic Mode... now survive this night... or forever forget the truth...";
 
+    [Header("Easter Egg Unlocks")]
+    [SerializeField] private bool unlocksScpEntitySwitch;
+
     [Header("Interaction")]
     [SerializeField] private float interactDistance = 3f;
     [SerializeField] private string promptMessage = "Press E to read.";
@@ -156,6 +159,7 @@ public class ReadablePaper : MonoBehaviour
         _readGroup.gameObject.SetActive(false);
 
         TryShowChaoticInsightAfterReading();
+        TryUnlockScpEntitySwitch();
     }
 
     private void BuildReadUi()
@@ -288,6 +292,15 @@ public class ReadablePaper : MonoBehaviour
 
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
+    }
+
+    private void TryUnlockScpEntitySwitch()
+    {
+        if (!unlocksScpEntitySwitch && !name.StartsWith("Secret_Note_2"))
+            return;
+
+        if (EasterEggSettings.UnlockScpEntitySwitch())
+            EasterEggUnlockPopup.Show();
     }
 
     private void HideInsightMessage()

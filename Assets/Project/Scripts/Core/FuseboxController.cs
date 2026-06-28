@@ -40,6 +40,7 @@ public class FuseboxController : MonoBehaviour
     private bool _fuse1Inserted;
     private bool _fuse2Inserted;
     private bool _playedPoweredOnSound;
+    private AudioSource _oneShotSource;
     private AudioSource _poweredBuzzSource;
 
     public static bool ElevatorPowerOn { get; private set; }
@@ -54,6 +55,8 @@ public class FuseboxController : MonoBehaviour
 
         ElevatorPowerOn = false;
         ApplyLightState();
+        PreloadAudio();
+        EnsureOneShotSource();
         EnsurePoweredBuzzSource();
     }
 
@@ -172,8 +175,24 @@ public class FuseboxController : MonoBehaviour
 
     private void PlayOneShot(AudioClip clip)
     {
-        if (clip != null)
-            AudioSource.PlayClipAtPoint(clip, GetFocusPoint(), audioVolume);
+        if (clip == null)
+            return;
+
+        EnsureOneShotSource();
+        if (_oneShotSource != null)
+            _oneShotSource.PlayOneShot(clip, audioVolume);
+    }
+
+    private void EnsureOneShotSource()
+    {
+        if (_oneShotSource != null)
+            return;
+
+        _oneShotSource = gameObject.AddComponent<AudioSource>();
+        _oneShotSource.playOnAwake = false;
+        _oneShotSource.loop = false;
+        _oneShotSource.spatialBlend = 1f;
+        _oneShotSource.volume = audioVolume;
     }
 
     private void EnsurePoweredBuzzSource()
@@ -187,6 +206,20 @@ public class FuseboxController : MonoBehaviour
         _poweredBuzzSource.spatialBlend = 1f;
         _poweredBuzzSource.clip = poweredBuzzSound;
         _poweredBuzzSource.volume = poweredBuzzVolume;
+    }
+
+    private void PreloadAudio()
+    {
+        PreloadClip(wrenchUsedSound);
+        PreloadClip(fuseInsertedSound);
+        PreloadClip(poweredOnSound);
+        PreloadClip(poweredBuzzSound);
+    }
+
+    private static void PreloadClip(AudioClip clip)
+    {
+        if (clip != null && clip.loadState == AudioDataLoadState.Unloaded)
+            clip.LoadAudioData();
     }
 
     private void StartPoweredBuzz()

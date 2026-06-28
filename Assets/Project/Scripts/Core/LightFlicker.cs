@@ -10,10 +10,12 @@ public class LightFlicker : MonoBehaviour
     [SerializeField] private float minIntensity  = 0.8f;
     [SerializeField] private float maxIntensity  = 1.2f;
     [SerializeField] private float flickerSpeed  = 8f;
+    [SerializeField] [Min(0.01f)] private float updateInterval = 0.1f;
 
     private Light _light;
     private float _baseIntensity;
     private float _noiseOffset;
+    private float _nextUpdateTime;
 
     private void Awake()
     {
@@ -24,6 +26,10 @@ public class LightFlicker : MonoBehaviour
 
     private void Update()
     {
+        if (Time.time < _nextUpdateTime)
+            return;
+
+        _nextUpdateTime = Time.time + updateInterval;
         float noise        = Mathf.PerlinNoise(_noiseOffset + Time.time * flickerSpeed, 0f);
         _light.intensity   = Mathf.Lerp(minIntensity, maxIntensity, noise) * _baseIntensity;
     }

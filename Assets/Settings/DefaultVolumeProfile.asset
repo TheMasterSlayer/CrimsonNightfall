@@ -56,7 +56,7 @@ MonoBehaviour:
   m_Script: {fileID: 0}
   m_Name: CopyPasteTestComponent2
   m_EditorClassIdentifier: Unity.RenderPipelines.Core.Editor.Tests:UnityEditor.Rendering.Tests:VolumeComponentCopyPasteTests/CopyPasteTestComponent2
-  active: 1
+  active: 0
   p1:
     m_OverrideState: 1
     m_Value: 0
@@ -119,7 +119,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 0fd9ee276a1023e439cf7a9c393195fa, type: 3}
   m_Name: TestAnimationCurveVolumeComponent
   m_EditorClassIdentifier: 
-  active: 1
+  active: 0
   testParameter:
     m_OverrideState: 1
     m_Value:
@@ -251,35 +251,7 @@ MonoBehaviour:
   m_Script: {fileID: 0}
   m_Name: VolumeComponentSupportedEverywhere
   m_EditorClassIdentifier: Unity.RenderPipelines.Core.Editor.Tests:UnityEngine.Rendering.Tests:VolumeComponentEditorSupportedOnTests/VolumeComponentSupportedEverywhere
-  active: 1
---- !u!114 &-5139089513906902183
-MonoBehaviour:
-  m_ObjectHideFlags: 3
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 0}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 5a00a63fdd6bd2a45ab1f2d869305ffd, type: 3}
-  m_Name: OasisFogVolumeComponent
-  m_EditorClassIdentifier: 
-  active: 1
-  Density:
-    m_OverrideState: 1
-    m_Value: 0
-  StartDistance:
-    m_OverrideState: 1
-    m_Value: 0
-  HeightRange:
-    m_OverrideState: 1
-    m_Value: {x: 0, y: 50}
-  Tint:
-    m_OverrideState: 1
-    m_Value: {r: 1, g: 1, b: 1, a: 1}
-  SunScatteringIntensity:
-    m_OverrideState: 1
-    m_Value: 2
+  active: 0--- !u!114 &-5139089513906902183
 --- !u!114 &-4463884970436517307
 MonoBehaviour:
   m_ObjectHideFlags: 3
@@ -314,10 +286,10 @@ MonoBehaviour:
   active: 1
   normalBias:
     m_OverrideState: 1
-    m_Value: 0.33
+    m_Value: 0.05
   viewBias:
     m_OverrideState: 1
-    m_Value: 0
+    m_Value: 0.1
   scaleBiasWithMinProbeDistance:
     m_OverrideState: 1
     m_Value: 0
@@ -329,7 +301,7 @@ MonoBehaviour:
     m_Value: 1
   leakReductionMode:
     m_OverrideState: 1
-    m_Value: 1
+    m_Value: 2
   minValidDotProductValue:
     m_OverrideState: 1
     m_Value: 0.1
@@ -426,7 +398,7 @@ MonoBehaviour:
   m_Script: {fileID: 0}
   m_Name: CopyPasteTestComponent3
   m_EditorClassIdentifier: Unity.RenderPipelines.Core.Editor.Tests:UnityEditor.Rendering.Tests:VolumeComponentCopyPasteTests/CopyPasteTestComponent3
-  active: 1
+  active: 0
   p1:
     m_OverrideState: 1
     m_Value: 0
@@ -456,7 +428,6 @@ MonoBehaviour:
   - {fileID: -1170528603972255243}
   - {fileID: -8270506406425502121}
   - {fileID: -5520245016509672950}
-  - {fileID: 7173750748008157695}
   - {fileID: 1666464333004379222}
   - {fileID: 9001657382290151224}
   - {fileID: -6335409530604852063}
@@ -468,6 +439,7 @@ MonoBehaviour:
   - {fileID: -6288072647309666549}
   - {fileID: 7518938298396184218}
   - {fileID: -1410297666881709256}
+  - {fileID: 7222539253772995307}
 --- !u!114 &853819529557874667
 MonoBehaviour:
   m_ObjectHideFlags: 3
@@ -836,7 +808,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 74955a4b0b4243bc87231e8b59ed9140, type: 3}
   m_Name: TestVolume
   m_EditorClassIdentifier: 
-  active: 1
+  active: 0
   param:
     m_OverrideState: 1
     m_Value: 123
@@ -868,8 +840,8 @@ MonoBehaviour:
   m_Script: {fileID: 0}
   m_Name: VolumeComponentSupportedOnAnySRP
   m_EditorClassIdentifier: Unity.RenderPipelines.Core.Editor.Tests:UnityEngine.Rendering.Tests:VolumeComponentEditorSupportedOnTests/VolumeComponentSupportedOnAnySRP
-  active: 1
---- !u!114 &7173750748008157695
+  active: 0--- !u!114 &7173750748008157695
+--- !u!114 &7222539253772995307
 MonoBehaviour:
   m_ObjectHideFlags: 3
   m_CorrespondingSourceObject: {fileID: 0}
@@ -880,7 +852,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 899c54efeace73346a0a16faa3afe726, type: 3}
   m_Name: Vignette
-  m_EditorClassIdentifier: 
+  m_EditorClassIdentifier: Unity.RenderPipelines.Universal.Runtime::UnityEngine.Rendering.Universal.Vignette
   active: 1
   color:
     m_OverrideState: 1
@@ -977,7 +949,7 @@ MonoBehaviour:
   m_Script: {fileID: 0}
   m_Name: CopyPasteTestComponent1
   m_EditorClassIdentifier: Unity.RenderPipelines.Core.Editor.Tests:UnityEditor.Rendering.Tests:VolumeComponentCopyPasteTests/CopyPasteTestComponent1
-  active: 1
+  active: 0
   p1:
     m_OverrideState: 1
     m_Value: 0

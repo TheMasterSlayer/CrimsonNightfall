@@ -37,6 +37,13 @@ public class GameManager : MonoBehaviour
         "where you can finally escape this never-ending nightmare..."
     };
 
+    private static readonly string[] ChaosEndingLines =
+    {
+        "You escaped the never-ending nightmare...",
+        "Very, very few are capable of doing so...",
+        "You are remarkable..."
+    };
+
     // ── Singleton ──────────────────────────────────────────────────────────
 
     public static GameManager Instance { get; private set; }
@@ -77,6 +84,7 @@ public class GameManager : MonoBehaviour
     private CanvasGroup _loseContentGroup;
     private Text _loseTipText;
     private Coroutine _loseTipRoutine;
+    private bool _showEasterEggUnlockBeforeMainMenu;
 
     // ── Unity Lifecycle ────────────────────────────────────────────────────
 
@@ -92,6 +100,9 @@ public class GameManager : MonoBehaviour
         Instance = this;
         ChaoticModeProgress.ResetRunProgress();
         CollectionInventory.ResetInventory();
+        gameObject.AddComponent<NormalModeEasterEggApplier>();
+        gameObject.AddComponent<NormalModeScpEntitySwitchApplier>();
+        gameObject.AddComponent<InGamePauseMenu>();
         BuildWinScreenIfNeeded();
         BuildLoseScreenIfNeeded();
     }
@@ -154,6 +165,9 @@ public class GameManager : MonoBehaviour
 
         bool foundSecretInsight = ChaoticModeProgress.SecretInsightFoundThisRun;
         ChaoticModeProgress.TryUnlockAfterEscape();
+        if (foundSecretInsight && SceneManager.GetActiveScene().name == "Normal_Mode")
+            _showEasterEggUnlockBeforeMainMenu = EasterEggSettings.UnlockNormalRainbowEntity();
+
         ShowWin(foundSecretInsight);
     }
 
@@ -194,7 +208,7 @@ public class GameManager : MonoBehaviour
 
     private IEnumerator PlayWinSequence(bool secretEnding)
     {
-        string[] lines = secretEnding ? SecretEndingLines : NormalEndingLines;
+        string[] lines = GetWinEndingLines(secretEnding);
 
         _winGroup.alpha = 1f;
         _winBackground.color = new Color(0f, 0f, 0f, 0f);
@@ -246,6 +260,14 @@ public class GameManager : MonoBehaviour
         _winButtonGroup.blocksRaycasts = true;
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
+    }
+
+    private string[] GetWinEndingLines(bool secretEnding)
+    {
+        if (SceneManager.GetActiveScene().name == "Chaos_Mode")
+            return ChaosEndingLines;
+
+        return secretEnding ? SecretEndingLines : NormalEndingLines;
     }
 
     private void ShowLose()
@@ -507,6 +529,13 @@ public class GameManager : MonoBehaviour
     /// <summary>Main menu button on win or lose screen.</summary>
     public void GoToMainMenu()
     {
+        if (_showEasterEggUnlockBeforeMainMenu)
+        {
+            _showEasterEggUnlockBeforeMainMenu = false;
+            EasterEggUnlockPopup.Show(() => SceneManager.LoadScene(mainMenuScene), false);
+            return;
+        }
+
         SceneManager.LoadScene(mainMenuScene);
     }
 }

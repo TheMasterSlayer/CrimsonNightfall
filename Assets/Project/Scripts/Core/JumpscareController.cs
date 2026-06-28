@@ -26,6 +26,8 @@ public class JumpscareController : MonoBehaviour
 
     private bool _isPlaying;
     private float _cameraFaceOriginalFov;
+    private Camera _overrideCamera;
+    private float _overrideZoomAmount = -1f;
 
     private void Awake()
     {
@@ -47,10 +49,30 @@ public class JumpscareController : MonoBehaviour
         StartCoroutine(JumpscareSequence());
     }
 
+    public void TriggerJumpscare(Camera overrideJumpscareCamera)
+    {
+        TriggerJumpscare(overrideJumpscareCamera, -1f);
+    }
+
+    public void TriggerJumpscare(Camera overrideJumpscareCamera, float overrideZoomAmount)
+    {
+        if (_isPlaying)
+            return;
+
+        _overrideCamera = overrideJumpscareCamera;
+        _overrideZoomAmount = overrideZoomAmount;
+        StartCoroutine(JumpscareSequence());
+    }
+
     private IEnumerator JumpscareSequence()
     {
         _isPlaying = true;
         CollectionInventory.ForceCloseInventory();
+        Camera activeJumpscareCamera = _overrideCamera != null ? _overrideCamera : cameraFace;
+        float activeCameraOriginalFov = activeJumpscareCamera != null
+            ? activeJumpscareCamera.fieldOfView
+            : 60f;
+        float activeZoomAmount = _overrideZoomAmount >= 0f ? _overrideZoomAmount : zoomAmount;
 
         // Lock player input
         PlayerController pc = GetComponent<PlayerController>();
@@ -62,23 +84,25 @@ public class JumpscareController : MonoBehaviour
 
         // Switch cameras
         if (playerCamera != null) playerCamera.enabled = false;
-        if (cameraFace   != null)
+        if (activeJumpscareCamera != null)
         {
-            cameraFace.enabled      = true;
-            cameraFace.fieldOfView = Mathf.Max(1f, _cameraFaceOriginalFov - zoomAmount);
+            activeJumpscareCamera.enabled = true;
+            activeJumpscareCamera.fieldOfView = Mathf.Max(1f, activeCameraOriginalFov - activeZoomAmount);
         }
 
         // Hold on the entity's face
         yield return new WaitForSeconds(holdDuration);
 
         // Clean up and trigger lose screen
-        if (cameraFace != null)
+        if (activeJumpscareCamera != null)
         {
-            cameraFace.enabled = false;
-            cameraFace.fieldOfView = _cameraFaceOriginalFov;
+            activeJumpscareCamera.enabled = false;
+            activeJumpscareCamera.fieldOfView = activeCameraOriginalFov;
         }
 
         if (playerCamera != null) playerCamera.enabled = true;
+        _overrideCamera = null;
+        _overrideZoomAmount = -1f;
 
         if (GameManager.Instance != null)
             GameManager.Instance.OnPlayerCaught();

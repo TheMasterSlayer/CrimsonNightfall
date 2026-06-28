@@ -22,6 +22,7 @@ public class SCPPropPhysicsObject : MonoBehaviour
     private void Awake()
     {
         _body = GetComponent<Rigidbody>();
+        ConfigureRestingRigidbody();
         RefreshPhysicsProfile();
     }
 
@@ -120,5 +121,18 @@ public class SCPPropPhysicsObject : MonoBehaviour
 
         foreach (NavMeshObstacle obstacle in GetComponentsInChildren<NavMeshObstacle>(true))
             obstacle.enabled = false;
+    }
+
+    private void ConfigureRestingRigidbody()
+    {
+        if (_body == null)
+            return;
+
+        _body.isKinematic = true;
+        _body.useGravity = true;
+        _body.interpolation = RigidbodyInterpolation.Interpolate;
+        _body.collisionDetectionMode = CollisionDetectionMode.Discrete;
+        _body.linearDamping = Mathf.Max(_body.linearDamping, 0.35f);
+        _body.angularDamping = Mathf.Max(_body.angularDamping, 0.15f);
     }
 }

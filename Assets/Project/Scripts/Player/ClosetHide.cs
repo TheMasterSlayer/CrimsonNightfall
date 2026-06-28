@@ -12,6 +12,10 @@ using UnityEngine.Playables;
 public class ClosetHide : MonoBehaviour
 {
     private static readonly List<ClosetHide> Closets = new List<ClosetHide>();
+    private static PlayerController CachedPlayerController;
+    private static CharacterController CachedCharacterController;
+    private static Transform CachedPlayerTransform;
+    private static Transform CachedPlayerCameraTransform;
 
     [Header("References")]
     [SerializeField] private Transform hidePosition;
@@ -94,6 +98,7 @@ public class ClosetHide : MonoBehaviour
     private PlayerController _playerController;
     private CharacterController _characterController;
     private Transform _playerTransform;
+    private Transform _playerCameraTransform;
 
     private Vector3 _entryPosition;
     private Quaternion _entryRotation;
@@ -109,6 +114,9 @@ public class ClosetHide : MonoBehaviour
     private Quaternion _leftClosedBaseLocalRotation;
     private Quaternion _rightClosedBaseLocalRotation;
     private bool _doorObstacleCollidersResized;
+    private float _nextInteractionRangeCheckTime;
+
+    private const float InteractionRangeCheckInterval = 0.25f;
 
     public static bool IsPlayerInAnyEntryZone
     {
@@ -203,8 +211,11 @@ public class ClosetHide : MonoBehaviour
         if (_isTransitioning)
             return;
 
-        if (!_isHiding)
+        if (!_isHiding && Time.time >= _nextInteractionRangeCheckTime)
+        {
+            _nextInteractionRangeCheckTime = Time.time + InteractionRangeCheckInterval;
             UpdateInteractionRange();
+        }
 
         if (_isHiding)
             HandleHidingLook();
@@ -421,21 +432,21 @@ public class ClosetHide : MonoBehaviour
 
     private void UpdateInteractionRange()
     {
-        PlayerController player = FindFirstObjectByType<PlayerController>();
-        if (player == null)
+        if (!EnsureCachedPlayer())
         {
             SetPlayerInRange(false);
             return;
         }
 
-        _playerController = player;
-        _characterController = player.GetComponent<CharacterController>();
-        _playerTransform = player.transform;
+        _playerController = CachedPlayerController;
+        _characterController = CachedCharacterController;
+        _playerTransform = CachedPlayerTransform;
+        _playerCameraTransform = CachedPlayerCameraTransform;
 
-        SetPlayerInRange(IsPlayerNearInteractionArea(player));
+        SetPlayerInRange(IsPlayerNearInteractionArea());
     }
 
-    private bool IsPlayerNearInteractionArea(PlayerController player)
+    private bool IsPlayerNearInteractionArea()
     {
         if (interactionArea == null)
         {
@@ -451,13 +462,8 @@ public class ClosetHide : MonoBehaviour
                 return true;
             }
 
-            if (IsPlayerOverlappingInteractionArea())
-            {
-                _lastInteractionCause = $"physics overlap with {GetObjectPath(interactionArea.transform)}";
-                return true;
-            }
-
-            if (IsPlayerPositionInsideInteractionCollider(interactionArea, player.transform.position + Vector3.up * 0.1f))
+            if (_playerTransform != null &&
+                IsPlayerPositionInsideInteractionCollider(interactionArea, _playerTransform.position + Vector3.up * 0.1f))
             {
                 _lastInteractionCause = $"player feet inside {GetObjectPath(interactionArea.transform)}";
                 return true;
@@ -470,9 +476,8 @@ public class ClosetHide : MonoBehaviour
                 return true;
             }
 
-            Camera playerCamera = player.GetComponentInChildren<Camera>(true);
-            if (playerCamera != null &&
-                IsPlayerPositionInsideInteractionCollider(interactionArea, playerCamera.transform.position))
+            if (_playerCameraTransform != null &&
+                IsPlayerPositionInsideInteractionCollider(interactionArea, _playerCameraTransform.position))
             {
                 _lastInteractionCause = $"player camera inside {GetObjectPath(interactionArea.transform)}";
                 return true;
@@ -482,8 +487,9 @@ public class ClosetHide : MonoBehaviour
             return false;
         }
 
-        Vector3 closestPoint = interactionArea.ClosestPoint(player.transform.position);
-        bool inRange = Vector3.Distance(player.transform.position, closestPoint) <= 0.01f;
+        Vector3 playerPosition = _playerTransform != null ? _playerTransform.position : transform.position;
+        Vector3 closestPoint = interactionArea.ClosestPoint(playerPosition);
+        bool inRange = Vector3.Distance(playerPosition, closestPoint) <= 0.01f;
         _lastInteractionCause = inRange
             ? $"near {GetObjectPath(interactionArea.transform)}"
             : "not near closet interaction area";
@@ -568,6 +574,34 @@ public class ClosetHide : MonoBehaviour
 
         if (_playerController != null)
             _playerTransform = _playerController.transform;
+
+        if (_playerController != null)
+        {
+            CachedPlayerController = _playerController;
+            CachedCharacterController = _characterController;
+            CachedPlayerTransform = _playerTransform;
+
+            Camera playerCamera = _playerController.GetComponentInChildren<Camera>(true);
+            CachedPlayerCameraTransform = playerCamera != null ? playerCamera.transform : null;
+            _playerCameraTransform = CachedPlayerCameraTransform;
+        }
+    }
+
+    private static bool EnsureCachedPlayer()
+    {
+        if (CachedPlayerController != null && CachedPlayerTransform != null)
+            return true;
+
+        CachedPlayerController = FindFirstObjectByType<PlayerController>();
+        if (CachedPlayerController == null)
+            return false;
+
+        CachedCharacterController = CachedPlayerController.GetComponent<CharacterController>();
+        CachedPlayerTransform = CachedPlayerController.transform;
+
+        Camera playerCamera = CachedPlayerController.GetComponentInChildren<Camera>(true);
+        CachedPlayerCameraTransform = playerCamera != null ? playerCamera.transform : null;
+        return true;
     }
 
     private string GetInteractionColliderSummary()
@@ -992,11 +1026,6 @@ public class ClosetInteractionAreaSensor : MonoBehaviour
     }
 
     private void OnTriggerEnter(Collider other)
-    {
-        _closet?.NotifyInteractionAreaPlayerInside(other);
-    }
-
-    private void OnTriggerStay(Collider other)
     {
         _closet?.NotifyInteractionAreaPlayerInside(other);
     }

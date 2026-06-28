@@ -15,10 +15,12 @@ public class LaserGlow : MonoBehaviour
     [SerializeField] private float minIntensity = 0.6f;
     [SerializeField] private float maxIntensity = 1.4f;
     [SerializeField] private float flickerSpeed = 18f;
+    [SerializeField] [Min(0.01f)] private float lightUpdateInterval = 0.08f;
 
     private Renderer[] _sourceRenderers;
     private Material _auraMaterial;
     private Light _light;
+    private float _nextLightUpdateTime;
 
     private void Awake()
     {
@@ -46,22 +48,44 @@ public class LaserGlow : MonoBehaviour
         if (_light == null)
             return;
 
+        if (Time.time < _nextLightUpdateTime)
+            return;
+
+        _nextLightUpdateTime = Time.time + lightUpdateInterval;
         float noise = Mathf.PerlinNoise(Time.time * flickerSpeed, transform.GetInstanceID() * 0.01f);
         _light.intensity = Mathf.Lerp(minIntensity, maxIntensity, noise);
     }
 
     private void CreateAuraCopies()
     {
-        _auraMaterial = new Material(Shader.Find("Universal Render Pipeline/Unlit"));
+        Shader auraShader = FindAuraShader();
+        if (auraShader == null)
+        {
+            Debug.LogWarning("[LaserGlow] No compatible unlit shader was found. Laser aura copies will be skipped.", this);
+            return;
+        }
+
+        _auraMaterial = new Material(auraShader);
         _auraMaterial.name = $"{name}_RuntimeLaserAura";
-        _auraMaterial.SetColor("_BaseColor", glowColor);
-        _auraMaterial.SetColor("_EmissionColor", glowColor * emissionStrength);
+        SetMaterialColor(_auraMaterial, glowColor);
+        SetMaterialColor(_auraMaterial, "_EmissionColor", glowColor * emissionStrength);
+
+        if (_auraMaterial.HasProperty("_Surface"))
+            _auraMaterial.SetFloat("_Surface", 1f);
+
+        if (_auraMaterial.HasProperty("_Blend"))
+            _auraMaterial.SetFloat("_Blend", 0f);
+
+        if (_auraMaterial.HasProperty("_SrcBlend"))
+            _auraMaterial.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
+
+        if (_auraMaterial.HasProperty("_DstBlend"))
+            _auraMaterial.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+
+        if (_auraMaterial.HasProperty("_ZWrite"))
+            _auraMaterial.SetInt("_ZWrite", 0);
+
         _auraMaterial.EnableKeyword("_EMISSION");
-        _auraMaterial.SetFloat("_Surface", 1f);
-        _auraMaterial.SetFloat("_Blend", 0f);
-        _auraMaterial.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
-        _auraMaterial.SetInt("_DstBlend", (int)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
-        _auraMaterial.SetInt("_ZWrite", 0);
         _auraMaterial.renderQueue = 3000;
 
         foreach (Renderer sourceRenderer in _sourceRenderers)
@@ -85,6 +109,27 @@ public class LaserGlow : MonoBehaviour
             auraRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             auraRenderer.receiveShadows = false;
         }
+    }
+
+    private static Shader FindAuraShader()
+    {
+        return Shader.Find("Universal Render Pipeline/Unlit") ??
+               Shader.Find("Universal Render Pipeline/Lit") ??
+               Shader.Find("Unlit/Color") ??
+               Shader.Find("Sprites/Default") ??
+               Shader.Find("Standard");
+    }
+
+    private static void SetMaterialColor(Material material, Color color)
+    {
+        SetMaterialColor(material, "_BaseColor", color);
+        SetMaterialColor(material, "_Color", color);
+    }
+
+    private static void SetMaterialColor(Material material, string propertyName, Color color)
+    {
+        if (material != null && material.HasProperty(propertyName))
+            material.SetColor(propertyName, color);
     }
 
     private void CreateGlowLight()

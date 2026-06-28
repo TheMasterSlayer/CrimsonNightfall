@@ -31,6 +31,7 @@ public class EntitySounds : MonoBehaviour
     private AudioSource _audioSource;
     private AudioSource _footstepSource;
     private AIEntity    _ai;
+    private UnityEngine.AI.NavMeshAgent _agent;
 
     private bool  _wasChasing     = false;
     private float _footstepTimer  = 0f;
@@ -52,6 +53,7 @@ public class EntitySounds : MonoBehaviour
         _footstepSource.volume       = footstepVolume;
 
         _ai = GetComponent<AIEntity>();
+        _agent = GetComponent<UnityEngine.AI.NavMeshAgent>();
     }
 
     private void Start()
@@ -140,10 +142,7 @@ public class EntitySounds : MonoBehaviour
 
     private void NavMeshAgentMoving(out bool isMoving, out bool isRunning)
     {
-        UnityEngine.AI.NavMeshAgent agent =
-            GetComponent<UnityEngine.AI.NavMeshAgent>();
-
-        float speed = agent != null ? agent.velocity.magnitude : 0f;
+        float speed = _agent != null ? _agent.velocity.magnitude : 0f;
         isMoving  = speed > 0.1f;
         isRunning = _ai.IsChasing;
     }

@@ -30,6 +30,7 @@ public class AIEntity : MonoBehaviour
     [SerializeField] private float sightAngle                  = 60f;  // degrees each side — total FOV is double this
     [SerializeField] private float crouchDetectionMultiplier   = 0.5f; // halves range when player crouches
     [SerializeField] private float catchDistance               = 1.5f;
+    [SerializeField] private float proximityCatchRadius        = 0.9f;
 
     [Header("Speed")]
     [SerializeField] private float patrolSpeed = 2f;
@@ -45,11 +46,13 @@ public class AIEntity : MonoBehaviour
     [SerializeField] private float doorCheckInterval = 0.15f;
 
     [Header("Flashlight Detection")]
+    [SerializeField] private bool reactToFlashlight = true;
     [SerializeField] private float flashlightDetectionRange = 25f;
     [SerializeField] private float flashlightDetectionAngle = 45f;
 
     [Header("Animation")]
     [SerializeField] private Animator _animator;
+    [SerializeField] private float animationSpeedDampTime = 0.2f;
 
     [Header("Jumpscare")]
     [SerializeField] private JumpscareController _jumpscareController;
@@ -108,11 +111,12 @@ public class AIEntity : MonoBehaviour
 
         SyncRestrictedWaypointStates();
         UpdateNearbyDoors();
+        if (CheckProximityCatch())
+            return;
+
         _canSeePlayer = CheckLineOfSight() || CheckFlashlightDetection();
 
-        // Drive animation speed from actual agent velocity
-        if (_animator != null)
-            _animator.SetFloat("Speed", _agent.velocity.magnitude / chaseSpeed);
+        UpdateAnimatorSpeed();
 
         switch (_state)
         {
@@ -133,6 +137,21 @@ public class AIEntity : MonoBehaviour
         Vector3 checkPosition = transform.position + transform.forward * (doorOpenRange * 0.5f);
         RoomDoorController.OpenNearbyForAI(checkPosition, doorOpenRange);
         RightRoomDoorController.OpenNearbyForAI(checkPosition, doorOpenRange);
+    }
+
+    private void UpdateAnimatorSpeed()
+    {
+        if (_animator == null || _agent == null)
+            return;
+
+        float targetSpeed = 0f;
+        if (!_agent.isStopped)
+        {
+            float maxSpeed = Mathf.Max(0.01f, chaseSpeed);
+            targetSpeed = Mathf.Clamp01(_agent.velocity.magnitude / maxSpeed);
+        }
+
+        _animator.SetFloat("Speed", targetSpeed, animationSpeedDampTime, Time.deltaTime);
     }
 
     // ── State Updates ──────────────────────────────────────────────────────
@@ -297,6 +316,21 @@ public class AIEntity : MonoBehaviour
         return true;
     }
 
+    private bool CheckProximityCatch()
+    {
+        if (_player == null)
+            return false;
+
+        if (_playerController != null && _playerController.IsHiding)
+            return false;
+
+        if (Vector3.Distance(transform.position, _player.position) > proximityCatchRadius)
+            return false;
+
+        TriggerCatch();
+        return true;
+    }
+
     private bool IsPlayerHit(Transform hitTransform)
     {
         if (hitTransform == null || _player == null)
@@ -311,6 +345,7 @@ public class AIEntity : MonoBehaviour
 
     private bool CheckFlashlightDetection()
     {
+        if (!reactToFlashlight) return false;
         if (_flashlight == null || !_flashlight.IsFlashlightOn) return false;
         if (_playerController != null && _playerController.IsHiding)  return false;
 
@@ -358,11 +393,7 @@ public class AIEntity : MonoBehaviour
                 _agent.isStopped = true;
                 _agent.ResetPath();
                 _lostPlayerIdleTimer = lostPlayerIdleTime;
-                if (_animator != null)
-                {
-                    _animator.SetBool("IsChasing", false);
-                    _animator.SetFloat("Speed", 0f);
-                }
+                if (_animator != null) _animator.SetBool("IsChasing", false);
                 break;
 
             case State.Returning:
@@ -533,6 +564,9 @@ public class AIEntity : MonoBehaviour
         // Catch distance in red
         Gizmos.color = Color.red;
         Gizmos.DrawWireSphere(transform.position, catchDistance);
+
+        Gizmos.color = new Color(1f, 0.35f, 0.15f);
+        Gizmos.DrawWireSphere(transform.position, proximityCatchRadius);
 
         // FOV cone lines
         Vector3 left  = Quaternion.Euler(0, -sightAngle, 0) * transform.forward * sightRange;

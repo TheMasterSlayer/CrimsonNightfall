@@ -28,6 +28,7 @@ public class ThunderStorm : MonoBehaviour
     [SerializeField] [Min(0f)] private float rainNearDistance = 2.5f;
     [SerializeField] [Min(0f)] private float rainFarDistance = 10f;
     [SerializeField] [Min(0.01f)] private float rainVolumeSmoothTime = 0.5f;
+    [SerializeField] [Min(0.01f)] private float rainVolumeCheckInterval = 0.2f;
 
     private static readonly string[] RainWindowNamePrefixes =
     {
@@ -41,6 +42,8 @@ public class ThunderStorm : MonoBehaviour
     private Transform _rainListener;
     private Transform[] _rainWindows;
     private float _rainVolumeVelocity;
+    private float _nextRainVolumeCheckTime;
+    private float _targetRainVolume;
 
     private void Awake()
     {
@@ -54,6 +57,7 @@ public class ThunderStorm : MonoBehaviour
         _rainSource.playOnAwake = false;
         _rainSource.spatialBlend = 0f;
         _rainSource.volume = rainRoomVolume;
+        _targetRainVolume = rainRoomVolume;
     }
 
     private void Start()
@@ -104,8 +108,18 @@ public class ThunderStorm : MonoBehaviour
         if (_rainSource == null || !_rainSource.isPlaying)
             return;
 
-        float targetVolume = rainRoomVolume;
+        if (Time.time >= _nextRainVolumeCheckTime)
+        {
+            _nextRainVolumeCheckTime = Time.time + rainVolumeCheckInterval;
+            _targetRainVolume = CalculateTargetRainVolume();
+        }
 
+        _rainSource.volume = Mathf.SmoothDamp(
+            _rainSource.volume, _targetRainVolume, ref _rainVolumeVelocity, rainVolumeSmoothTime);
+    }
+
+    private float CalculateTargetRainVolume()
+    {
         if (_rainListener != null && _rainWindows != null && _rainWindows.Length > 0)
         {
             float nearestSqrDistance = float.PositiveInfinity;
@@ -123,11 +137,10 @@ public class ThunderStorm : MonoBehaviour
             float farDistance = Mathf.Max(rainNearDistance + 0.01f, rainFarDistance);
             float proximity = 1f - Mathf.InverseLerp(
                 rainNearDistance, farDistance, nearestDistance);
-            targetVolume = Mathf.Lerp(rainRoomVolume, rainWindowVolume, proximity);
+            return Mathf.Lerp(rainRoomVolume, rainWindowVolume, proximity);
         }
 
-        _rainSource.volume = Mathf.SmoothDamp(
-            _rainSource.volume, targetVolume, ref _rainVolumeVelocity, rainVolumeSmoothTime);
+        return rainRoomVolume;
     }
 
     // ── Thunder Loop ───────────────────────────────────────────────────────
