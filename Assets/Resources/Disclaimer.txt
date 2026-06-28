@@ -13,8 +13,7 @@ Of course, the best survival trick is to hide in closets, but make sure to do it
 
 Developer note to players:
 This is my first personal videogame creation project, and I've made sure to thoroughly test it so that there aren't any game
-breaking features present within gameplay. Personally as a gamer, I do try to find bugs in games, so I would expect some of you to 
-try and do the same.
+breaking features present within gameplay. Personally as a gamer, I do try to find bugs in games, so I would expect some of you to try and do the same.
 
 Lastly, there is only so much playtesting that can be done with the "Chaos" mode. It is clear that objects will fly, shift, and
 ultimately be displaced from their current position, potentially making a gameplay impossible. This gamemode is only for those who
