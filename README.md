@@ -16,6 +16,19 @@ This project is a complete personal game prototype: systems, level design, AI, U
 
 ---
 
+## Showcase
+
+![Crimson Nightfall screenshot 1](Assets/Resources/TitleScreenBackground.png)
+![Crimson Nightfall screenshot 2](Assets/Resources/TitleScreenBackground2.png)
+![Crimson Nightfall screenshot 3](Assets/Resources/TitleScreenBackground3.png)
+![Crimson Nightfall screenshot 4](Assets/Resources/TitleScreenBackground4.png)
+![Crimson Nightfall screenshot 5](Assets/Resources/TitleScreenBackground5.png)
+![Crimson Nightfall screenshot 6](Assets/Resources/TitleScreenBackground6.png)
+![Crimson Nightfall screenshot 7](Assets/Resources/TitleScreenBackground7.png)
+![Crimson Nightfall screenshot 8](Assets/Resources/TitleScreenBackground8.png)
+
+---
+
 ## Features
 
 - **Stealth survival** — Crouch, hide in closets, manage stamina, and use darkness to your advantage
